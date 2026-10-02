@@ -22,7 +22,7 @@ function niceDate(iso){
 
 /* ---------- state: everything lives on this device ---------- */
 let storageOK = true, offlineReady = false;
-function freshState(){ return {v:2, deviceId:'d'+rid(6), deviceName:'', sound:true, meetId:null, meets:{},
+function freshState(){ return {v:2, roles:1, deviceId:'d'+rid(6), deviceName:'', sound:true, meetId:null, meets:{},
   ui:{tab:'home', lock:null, rosterSchool:null, resRace:null, openRow:null}}; }
 function load(){
   let s=null;
@@ -30,6 +30,8 @@ function load(){
   catch(e){ storageOK=false; }
   if(!s||s.v!==2) s=freshState();
   s.ui=s.ui||{}; s.meets=s.meets||{};
+  /* meets saved before organizer and volunteer views were separate keep the full view, so nobody is locked out */
+  if(!s.roles){ Object.keys(s.meets).forEach(k => { s.meets[k].own=true; }); s.roles=1; }
   return s;
 }
 let lastJSON=null;
@@ -45,6 +47,8 @@ function adoptStored(str){
 }
 
 function curMeet(){ const m=S.meets[S.meetId]; return (m&&!m.config.deleted)?m:null; }
+/* Organizer view (Setup and Results) or volunteer view (the three jobs only), decided per meet on this device. */
+function isOwner(meet){ return !!(meet&&meet.own); }
 function liveMeets(){ return Object.values(S.meets).filter(m => !m.config.deleted)
   .sort((a,b) => (b.config.date||'').localeCompare(a.config.date||'')||(b.config.ver||0)-(a.config.ver||0)); }
 function schoolOf(meet,id){ return meet.config.schools.find(s => s.id===id)||null; }
@@ -134,14 +138,17 @@ function toDelimited(meet,raceIds,sep){
 }
 
 /* ---------- moving data between devices ---------- */
-function meetLinkFor(code){ return location.href.split('#')[0]+'#m='+code; }
-function importConfig(cfg, boot){
+/* #m= is the volunteer link; #o= is the organizer's own link and turns on Setup and Results */
+const LINK_RE=/#([mo])=([A-Za-z0-9_-]+)/;
+function meetLinkFor(code, owner){ return location.href.split('#')[0]+(owner?'#o=':'#m=')+code; }
+function importConfig(cfg, boot, owner){
   if(!cfg) return {ok:false, msg:'That is not a meet link from this app.'};
   const local=S.meets[cfg.id], cur=curMeet(), isNew=!local||!!local.config.deleted; let msg, quiet=false;
-  if(!local){ S.meets[cfg.id]={config:cfg, streams:{}, results:{}}; msg='Loaded '+cfg.name; }
+  if(!local){ S.meets[cfg.id]={config:cfg, streams:{}, results:{}, own:!!owner}; msg='Loaded '+cfg.name; }
   else if(local.config.deleted){ local.config=cfg; msg='Loaded '+cfg.name; }
   else if(cfg.ver>(local.config.ver||0)){ local.config=cfg; msg='Updated '+cfg.name; }
   else{ msg=cfg.name+' is already on this device'; quiet=true; }
+  if(owner&&local&&!local.own){ local.own=true; msg+='. Setup and Results are now available on this device'; quiet=false; }
   if(!cur||cur.config.id!==cfg.id){
     if(cur&&S.ui.lock){ msg+='. This device is in the middle of a job for '+cur.config.name+'. Exit that first, then choose the meet in Setup.'; quiet=false; }
     else if(cur&&boot&&!isNew){ quiet=true; }   /* an old link left in the address bar never pulls the device off its current meet */
@@ -168,19 +175,19 @@ function importStreams(p){
   if(p.meetId!==S.meetId) msg+=' Saved under '+meet.config.name+', which is not the meet on screen.';
   return {ok:true, msg};
 }
-function importCode(code, boot){
+function importCode(code, boot, owner){
   return X.decodeText(code).then(txt => {
     let obj=null; try{ obj=JSON.parse(txt); }catch(e){}
     if(obj&&obj.st) return importStreams(X.unpackStreams(obj));
-    if(obj&&obj.i) return importConfig(X.unpackConfig(obj), boot);
+    if(obj&&obj.i) return importConfig(X.unpackConfig(obj), boot, owner);
     return {ok:false, msg:'That code is not from this app.'};
   }, e => ({ok:false, msg:(e&&e.message)==='old-browser'?'This browser is too old to read the code. Update the phone or use another device.':'That code could not be read. Copy or scan it again.'}));
 }
 /* Accepts a meet link, one or more frames, or a bare code. */
 function importIncoming(text){
   text=String(text||'').trim();
-  const link=/#m=([A-Za-z0-9_-]+)/.exec(text);
-  if(link) return importCode(link[1]);
+  const link=LINK_RE.exec(text);
+  if(link) return importCode(link[2], false, link[1]==='o');
   /* several volunteers' codes can be pasted together: collect each one separately */
   const asms={}, order=[];
   text.split(/\s+/).forEach(tok => { const f=X.parseFrame(tok); if(!f) return; const key=f.msg+'/'+f.n;
@@ -366,20 +373,21 @@ function render(noGuard){
   }
   wake(false);
   const keep=$('main'), top=keep?keep.scrollTop:0, s=statusPill();
-  const tabs=[['timer','Timer'],['schools','Schools'],['roster','Roster'],['results','Results'],['setup','Setup']];
+  const tabs=!meet?[]:[['timer','Timer'],['schools','Schools'],['roster','Roster']].concat(isOwner(meet)?[['results','Results'],['setup','Setup']]:[]);
   app.className='app';
   app.innerHTML='<header class="top"><button class="brand" data-act="tab" data-tab="home"><strong>XC Finish Line</strong><span>'+esc(meet?meet.config.name:'No meet on this device')+'</span></button>'+
     '<button class="pill" id="pill" data-act="upload-now"><span class="dot '+s[0]+'"></span>'+esc(s[1])+'</button>'+
     (meet?'<button class="btn sm pri" data-act="send">Send</button>':'')+'</header>'+
-    '<nav class="tabs" role="tablist">'+tabs.map(t => '<button role="tab" aria-selected="'+(S.ui.tab===t[0])+'" data-act="tab" data-tab="'+t[0]+'">'+t[1]+'</button>').join('')+'</nav>'+
+    '<nav class="tabs" role="tablist" style="--n:'+Math.max(1,tabs.length)+'"'+(tabs.length?'':' hidden')+'>'+tabs.map(t => '<button role="tab" aria-selected="'+(S.ui.tab===t[0])+'" data-act="tab" data-tab="'+t[0]+'">'+t[1]+'</button>').join('')+'</nav>'+
     '<main id="main" class="main"><div class="wrap">'+mainHTML(meet)+'</div></main>';
   $('main').scrollTop=top;
 }
 function mainHTML(meet){
   const warn=storageOK?'':'<div class="banner bad"><strong>This browser is not saving data on the device.</strong>Taps will be lost if the page reloads. Turn off private browsing before the race.</div>';
-  const tab=S.ui.tab;
-  if(tab==='setup'){ refreshLink(); return warn+setupHTML(meet); }
   if(!meet) return warn+noMeetHTML();
+  let tab=S.ui.tab;
+  if(!isOwner(meet)&&(tab==='setup'||tab==='results')) tab='home';   /* volunteers have the three jobs only */
+  if(tab==='setup'){ refreshLink(); return warn+setupHTML(meet); }
   if(tab==='timer') return warn+timerHTML(meet);
   if(tab==='schools') return warn+schoolsHTML(meet);
   if(tab==='roster') return warn+rosterHTML(meet);
@@ -387,22 +395,32 @@ function mainHTML(meet){
   return warn+homeHTML(meet);
 }
 function noMeetHTML(){
-  return '<section class="sec"><h2>No meet on this device</h2><p class="note">Open the meet link you were sent, or paste it here. If you are organizing the meet, create one in Setup.</p>'+
+  return '<section class="sec"><h2>No meet on this device</h2><p class="note">Volunteers: open the meet link you were sent, or paste it here.</p>'+
     '<label class="field"><span>Meet link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste the meet link"></textarea></label>'+
-    '<div class="rowf"><button class="btn pri" data-act="import-link">Load meet</button><button class="btn" data-act="tab" data-tab="setup">Go to Setup</button></div></section>';
+    '<div class="rowf"><button class="btn pri" data-act="import-link">Load meet</button></div></section>'+
+    '<section class="sec"><h3>Organizing a meet?</h3><p class="note">Create it here. This device becomes the organizer\'s, with Setup and Results. Volunteers get a link that shows only Timer, Schools and Roster.</p>'+
+    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div></section>';
+}
+function soundField(){
+  return '<label class="field" style="flex:0 1 150px"><span>Tap sound</span><select id="sound" data-bind="sound"><option value="1"'+(S.sound?' selected':'')+'>On</option><option value="0"'+(S.sound?'':' selected')+'>Off</option></select></label>';
+}
+function meetPickerHTML(meet){
+  const meets=liveMeets(); if(meets.length<2) return '';
+  return '<label class="field"><span>Meet on this device</span><select id="pickmeet" data-bind="pick-meet">'+meets.map(m =>
+    '<option value="'+esc(m.config.id)+'"'+(m.config.id===meet.config.id?' selected':'')+'>'+esc(m.config.name)+(m.config.date?' ('+esc(niceDate(m.config.date))+')':'')+'</option>').join('')+'</select></label>';
 }
 function deviceNameField(){
   return '<label class="field"><span>Your name or device (shown to the organizer)</span><input type="text" id="devname" data-bind="device-name" value="'+esc(S.deviceName)+'" placeholder="Sam\'s phone" autocomplete="off"></label>';
 }
 function homeHTML(meet){
   return '<section class="sec"><h2>'+esc(meet.config.name)+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date))+'. ':'')+
-    'This device is set up for the meet and needs no signal from here on. Pick your job.</p>'+deviceNameField()+'</section>'+
+    'This device is set up for the meet and needs no signal from here on. Pick your job.</p>'+meetPickerHTML(meet)+'<div class="rowf">'+deviceNameField()+soundField()+'</div></section>'+
     '<section class="roles">'+
     '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses. Switch races at the top.</span></button>'+
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
     '<button class="role c2" data-act="go" data-kind="roster"><b>Roster</b><span>End of the chute. Take each card, tap the school, then the runner\'s name.</span></button>'+
     '</section><section class="sec"><p class="note">'+(syncUrl(meet)?'When you are done, hold Exit. Your taps upload by themselves once the phone has signal, and the top of the screen says Uploaded. With no signal, press Send and show the code to the organizer.'
-      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+' Organizer: Results and Setup are in the tabs above.</p></section>';
+      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+(isOwner(meet)?' This is the organizer\'s device: Results and Setup are in the tabs above.':'')+'</p></section>';
 }
 
 /* ----- Setup ----- */
@@ -415,8 +433,7 @@ function setupHTML(meet){
       '<section class="sec"><h3>Or load one</h3><label class="field"><span>Meet link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste a meet link"></textarea></label><div class="rowf"><button class="btn" data-act="import-link">Load meet</button></div></section>';
   }
   const c=meet.config;
-  if(meets.length>1) h+='<label class="field"><span>Current meet</span><select id="pickmeet" data-bind="pick-meet">'+meets.map(m =>
-    '<option value="'+esc(m.config.id)+'"'+(m.config.id===c.id?' selected':'')+'>'+esc(m.config.name)+(m.config.date?' ('+esc(niceDate(m.config.date))+')':'')+'</option>').join('')+'</select></label>';
+  h+=meetPickerHTML(meet);
   h+='<div class="rowf"><label class="field" style="flex:2 1 200px"><span>Meet name</span><input type="text" id="meetname" data-bind="meet-name" value="'+esc(c.name)+'"></label>'+
      '<label class="field" style="flex:1 1 150px"><span>Date</span><input type="date" id="meetdate" data-bind="meet-date" value="'+esc(c.date||'')+'"></label></div>'+
      '<div class="rowf"><button class="btn" data-act="new-meet">New meet (copies schools and rosters)</button></div></section>';
@@ -451,12 +468,13 @@ function setupHTML(meet){
      '<label class="field"><span>Web app link</span><input type="text" id="syncurl" data-bind="sync-url" value="'+esc(raw)+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
      (raw&&!su?'<div class="banner warn"><strong>That is not a web app link.</strong>It should start with https://script.google.com/ and end in /exec.</div>':'')+
      '<div class="rowf"><button class="btn'+(su?' pri':'')+'" data-act="sync-test">Test the connection</button></div></section>';
-  h+='<section class="sec"><h2>Send the meet to volunteers</h2><p class="note">The link contains the races, schools and rosters, so treat it like the roster itself. Each volunteer opens it once with a connection. Send it again after any change.</p>'+
-     '<div class="rowf"><button class="btn pri" data-act="copy-link">Copy meet link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
-     '<button class="btn" data-act="show-link-qr">Show as QR code</button></div><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
+  h+='<section class="sec"><h2>Send the meet to volunteers</h2><p class="note">The volunteer link opens the app with only Timer, Schools and Roster: no Setup and no Results. It contains the races, schools and rosters, so treat it like the roster itself. Each volunteer opens it once with a connection. Send it again after any change.</p>'+
+     '<div class="rowf"><button class="btn pri" data-act="copy-link">Copy volunteer link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
+     '<button class="btn" data-act="show-link-qr">Show as QR code</button></div>'+
+     '<p class="note">For your own other devices, such as a tablet you will collect results on, use the organizer link. It opens the same meet with Setup and Results. Keep it to yourself.</p>'+
+     '<div class="rowf"><button class="btn" data-act="copy-org-link">Copy organizer link</button></div><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
 
-  h+='<section class="sec"><h2>This device</h2><div class="rowf">'+deviceNameField()+
-     '<label class="field" style="flex:0 1 150px"><span>Tap sound</span><select id="sound" data-bind="sound"><option value="1"'+(S.sound?' selected':'')+'>On</option><option value="0"'+(S.sound?'':' selected')+'>Off</option></select></label></div></section>';
+  h+='<section class="sec"><h2>This device</h2><div class="rowf">'+deviceNameField()+soundField()+'</div></section>';
 
   h+='<section class="sec"><h2>Race day</h2><ol class="steps">'+
      '<li>Before leaving a connection, every volunteer opens the meet link and waits for "Works offline" at the top.</li>'+
@@ -487,7 +505,7 @@ function timerHTML(meet){
   return h+'</div></section>';
 }
 function schoolsHTML(meet){
-  if(!meet.config.schools.length) return '<div class="empty"><p>Add the schools in Setup first. Each one becomes a button here.</p></div>';
+  if(!meet.config.schools.length) return '<div class="empty"><p>'+(isOwner(meet)?'Add the schools in Setup first. Each one becomes a button here.':'This meet has no schools yet. Ask the organizer for an updated link.')+'</p></div>';
   let h='<section class="sec"><h2>School taps</h2><p class="note">Tap the school of each runner as they cross the line, in order. The switch at the top chooses the race.</p>'+
     '<div class="rowf"><button class="btn pri" data-act="go" data-kind="school">Open the school buttons</button></div><div class="list">';
   meet.config.races.forEach(r => {
@@ -498,7 +516,7 @@ function schoolsHTML(meet){
   return h+'</div></section>';
 }
 function rosterHTML(meet){
-  if(!meet.config.schools.length) return '<div class="empty"><p>Add the schools and rosters in Setup first.</p></div>';
+  if(!meet.config.schools.length) return '<div class="empty"><p>'+(isOwner(meet)?'Add the schools and rosters in Setup first.':'This meet has no schools yet. Ask the organizer for an updated link.')+'</p></div>';
   let h='<section class="sec"><h2>Roster</h2><p class="note">At the end of the chute: take the card, tap the school, tap the name. The switch at the top chooses the race. The place follows the cards in order, and you can enter a card number when someone arrives out of order.</p>'+
     '<div class="rowf"><button class="btn pri" data-act="go" data-kind="roster">Open the roster</button></div><div class="list">';
   meet.config.races.forEach(r => {
@@ -862,8 +880,8 @@ function scanLoop(){
   scan.timer=setTimeout(scanLoop,140);
 }
 function onScanText(text){
-  const link=/#m=([A-Za-z0-9_-]+)/.exec(text);
-  if(link){ finishScan(importCode(link[1]), 'link:'+link[1].slice(0,12)); return; }
+  const link=LINK_RE.exec(text);
+  if(link){ finishScan(importCode(link[2], false, link[1]==='o'), 'link:'+link[2].slice(0,12)); return; }
   const res=scan.asm.add(text);
   if(!res){ scanNote('warn','That is a QR code, but not one from this app.'); return; }
   if(scan.asm.msg===scan.lastMsg) return;
@@ -891,33 +909,34 @@ function newMeet(){
     schools:prev?clone(prev.config.schools):[{id:'s'+rid(3), name:'Berkshire', color:'#1F7A4D'}],
     races:prev?clone(prev.config.races):[{id:'g', name:'Girls'},{id:'b', name:'Boys'}],
     runners:prev?clone(prev.config.runners):[]};
-  S.meets[id]={config:cfg, streams:{}, results:{}}; S.meetId=id;
+  S.meets[id]={config:cfg, streams:{}, results:{}, own:true}; S.meetId=id;
   Object.assign(S.ui,{tab:'setup', resRace:null, openRow:null, lock:null, rosterSchool:null}); save(); render();
 }
 function colEdit(fn){ const meet=curMeet(), r=ensureCols(meet,S.ui.resRace); fn(r.cols,r); touchResult(meet,r); render(); }
 function padTo(arr,n,mk){ while(arr.length<n) arr.push(mk()); }
 const blankS=() => ({s:null,t:null}), blankT=() => null;
-function meetLink(meet){ return X.encodeText(JSON.stringify(X.packConfig(meet.config))).then(meetLinkFor); }
+function meetCode(meet){ return X.encodeText(JSON.stringify(X.packConfig(meet.config))); }
 /* The link is prepared ahead of the tap, because phones only allow copying and sharing directly inside a tap. */
-let linkCache={id:null, ver:0, link:null};
+let linkCache={id:null, ver:0, code:null};
 function refreshLink(){
   const meet=curMeet(); if(!meet) return;
   const id=meet.config.id, ver=meet.config.ver;
   if(linkCache.id===id&&linkCache.ver===ver) return;
-  meetLink(meet).then(link => { if(meet.config.ver===ver) linkCache={id, ver, link}; }, () => {});
+  meetCode(meet).then(code => { if(meet.config.ver===ver) linkCache={id, ver, code}; }, () => {});
 }
-function withLink(meet,fn){
-  if(linkCache.id===meet.config.id&&linkCache.ver===meet.config.ver&&linkCache.link) fn(linkCache.link);
-  else meetLink(meet).then(fn, () => toast('Could not build the link in this browser'));
+function withLink(meet,fn,owner){
+  if(linkCache.id===meet.config.id&&linkCache.ver===meet.config.ver&&linkCache.code) fn(meetLinkFor(linkCache.code, owner));
+  else meetCode(meet).then(code => fn(meetLinkFor(code, owner)), () => toast('Could not build the link in this browser'));
 }
 
 function act(name,el){
   const meet=curMeet(), d=el?el.dataset:{}, i=d.i!=null?+d.i:-1, raceId=d.race;
   let st, r;
   switch(name){
-    case 'tab': S.ui.tab=d.tab; S.ui.openRow=null; save(); render(); $('main').scrollTop=0; if(d.tab==='results') pullSheet(false); break;
+    case 'tab': S.ui.tab=(!isOwner(meet)&&(d.tab==='setup'||d.tab==='results'))?'home':d.tab; S.ui.openRow=null; save(); render(); $('main').scrollTop=0;
+      if(S.ui.tab==='results') pullSheet(false); break;
     case 'go': if(!meet) break;
-      if(d.kind!=='timer'&&!meet.config.schools.length){ toast('Add the schools in Setup first'); break; }
+      if(d.kind!=='timer'&&!meet.config.schools.length){ toast(isOwner(meet)?'Add the schools in Setup first':'This meet has no schools yet. Ask the organizer for an updated link.'); break; }
       S.ui.lock={kind:d.kind}; S.ui.rosterSchool=null; save(); render(); break;
     case 'send': openSend(); break;
     case 'scan': ov={type:'scan'}; scan.lastMsg=null; scan.cam=null; renderOverlay(); break;
@@ -937,7 +956,8 @@ function act(name,el){
       touchConfig(meet); render(); toast('Swapped '+plural(k,'name')+'. Send the meet link again.'); break; }
     case 'add-race': meet.config.races.push({id:'r'+rid(3), name:'Race '+(meet.config.races.length+1)}); touchConfig(meet); render(); break;
     case 'del-race': { const gone=meet.config.races.splice(i,1)[0]; meet.config.runners=meet.config.runners.filter(u => u.r!==gone.id); touchConfig(meet); render(); break; }
-    case 'copy-link': withLink(meet, link => copyText(link, 'Meet link copied', 'linkout')); break;
+    case 'copy-link': withLink(meet, link => copyText(link, 'Volunteer link copied', 'linkout')); break;
+    case 'copy-org-link': withLink(meet, link => copyText(link, 'Organizer link copied. Keep it to yourself.', 'linkout'), true); break;
     case 'share-link': withLink(meet, link => navigator.share({title:meet.config.name, text:meet.config.name+' finish line', url:link}).catch(shareFail)); break;
     case 'show-link-qr': withLink(meet, link => { if(link.length>2600){ toast('This meet is too big for one QR code. Text the link instead.'); return; } ov={type:'linkqr', link}; renderOverlay(); }); break;
 
@@ -1133,8 +1153,8 @@ document.addEventListener('change', e => {
 /* ---------- boot ---------- */
 function boot(){
   render();
-  const m=/#m=([A-Za-z0-9_-]+)/.exec(location.hash||'');
-  if(m) importCode(m[1], true).then(res => { if(res.ok) render(); if(!res.quiet) toast(res.msg); });
+  const m=LINK_RE.exec(location.hash||'');
+  if(m) importCode(m[2], true, m[1]==='o').then(res => { if(res.ok) render(); if(!res.quiet) toast(res.msg); });
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(() => {});
     navigator.serviceWorker.ready.then(() => { offlineReady=true; softHeader(); }).catch(() => {});
@@ -1144,6 +1164,6 @@ function boot(){
   setTimeout(() => maybeUpload(false), 3000);
 }
 let scriptText='';
-window.addEventListener('hashchange', () => { const m=/#m=([A-Za-z0-9_-]+)/.exec(location.hash||''); if(m) importCode(m[1]).then(res => { toast(res.msg); if(res.ok) render(); }); });
+window.addEventListener('hashchange', () => { const m=LINK_RE.exec(location.hash||''); if(m) importCode(m[2], false, m[1]==='o').then(res => { toast(res.msg); if(res.ok) render(); }); });
 boot();
 })();

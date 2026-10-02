@@ -39,7 +39,7 @@ button{cursor:pointer}
   display:flex;align-items:center;gap:6px;white-space:nowrap;min-height:34px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
 .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
-.tabs{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border-bottom:1px solid var(--line)}
+.tabs{display:grid;grid-template-columns:repeat(var(--n,5),1fr);background:var(--surface);border-bottom:1px solid var(--line)}
 .tabs button{border:0;background:none;padding:11px 2px 9px;font-family:var(--display);font-weight:600;font-size:1rem;
   letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-bottom:3px solid transparent;min-height:44px}
 .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--tap)}
