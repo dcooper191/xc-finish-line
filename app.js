@@ -57,7 +57,7 @@ function myStream(meet,raceId,kind,create){
   if(!st&&create){
     st=meet.streams[id]={id, raceId, kind, deviceId:S.deviceId, deviceName:S.deviceName||'', updatedAt:Date.now()};
     if(kind==='timer'){ st.startedAt=null; st.endedAt=null; st.taps=[]; }
-    else if(kind==='school'){ st.open=false; st.taps=[]; }
+    else if(kind==='school'){ st.taps=[]; }
     else { st.picks=[]; st.added=[]; }
   }
   return st||null;
@@ -204,7 +204,13 @@ function sendSummary(meet){
 
 /* ---------- small UI helpers ---------- */
 let toastT=null;
-function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(() => { t.hidden=true; }, 2800); }
+function toast(msg){
+  /* on a race-day screen the message goes in the status line, so nothing ever floats over the buttons or the race switch */
+  const line=S.ui.lock&&!ov?$('last'):null, t=$('toast');
+  clearTimeout(toastT);
+  if(line){ t.hidden=true; line.textContent=msg; line.classList.add('say'); toastT=setTimeout(() => { line.classList.remove('say'); softLock(); }, 2800); return; }
+  t.textContent=msg; t.hidden=false; toastT=setTimeout(() => { t.hidden=true; }, 2800);
+}
 let actx=null;
 function beep(f){
   if(!S.sound) return;
@@ -261,14 +267,15 @@ function statusPill(){
   return offlineReady?['ok','Works offline']:['','Saved on device'];
 }
 function softHeader(){ const el=$('pill'); if(el){ const s=statusPill(); el.innerHTML='<span class="dot '+s[0]+'"></span>'+esc(s[1]); } }
-function render(){
+function render(noGuard){
   const app=$('app'); let meet=curMeet(); pendingRender=false;
   if(!meet){ const first=liveMeets()[0]; if(first){ S.meetId=first.config.id; meet=first; } }
   if(S.ui.lock&&!meet) S.ui.lock=null;
   if(S.ui.lock){
     app.className='app locked';
     app.innerHTML=S.ui.lock.kind==='timer'?lockTimerHTML(meet):S.ui.lock.kind==='school'?lockSchoolHTML(meet):lockRosterHTML(meet);
-    lockRenderAt=performance.now(); softLock(); wake(true); return;
+    if(noGuard!==true) lockRenderAt=performance.now();
+    softLock(); wake(true); return;
   }
   wake(false);
   const keep=$('main'), top=keep?keep.scrollTop:0, s=statusPill();
@@ -304,7 +311,7 @@ function homeHTML(meet){
   return '<section class="sec"><h2>'+esc(meet.config.name)+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date))+'. ':'')+
     'This device is set up for the meet and needs no signal from here on. Pick your job.</p>'+deviceNameField()+'</section>'+
     '<section class="roles">'+
-    '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses.</span></button>'+
+    '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses. Switch races at the top.</span></button>'+
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
     '<button class="role c2" data-act="go" data-kind="roster"><b>Roster</b><span>End of the chute. Take each card, tap the school, then the runner\'s name.</span></button>'+
     '</section><section class="sec"><p class="note">When your race is over, press Send and show the code to the organizer. Organizer: Results and Setup are in the tabs above.</p></section>';
@@ -367,7 +374,7 @@ function timerStatus(st){
   return ['', 'Ended, '+st.taps.length+' recorded'];
 }
 function timerHTML(meet){
-  let h='<section class="sec"><h2>Timer</h2><p class="note">One screen times every race. START sits on the screen for each race, and the pad splits when two races are running.</p>'+
+  let h='<section class="sec"><h2>Timer</h2><p class="note">One screen times every race. The switch at the top chooses which race the big button belongs to: START first, then one tap per finisher. All clocks keep running whichever race is showing.</p>'+
     '<div class="rowf"><button class="btn pri" data-act="go" data-kind="timer">Open the timer</button></div><div class="list">';
   meet.config.races.forEach(r => {
     const st=myStream(meet,r.id,'timer'), s=timerStatus(st);
@@ -380,7 +387,7 @@ function timerHTML(meet){
 }
 function schoolsHTML(meet){
   if(!meet.config.schools.length) return '<div class="empty"><p>Add the schools in Setup first. Each one becomes a button here.</p></div>';
-  let h='<section class="sec"><h2>School taps</h2><p class="note">Tap the school of each runner as they cross the line, in order. Open a race when its first runners are coming in.</p>'+
+  let h='<section class="sec"><h2>School taps</h2><p class="note">Tap the school of each runner as they cross the line, in order. The switch at the top chooses the race.</p>'+
     '<div class="rowf"><button class="btn pri" data-act="go" data-kind="school">Open the school buttons</button></div><div class="list">';
   meet.config.races.forEach(r => {
     const st=myStream(meet,r.id,'school'), n=entryCount(st);
@@ -391,7 +398,7 @@ function schoolsHTML(meet){
 }
 function rosterHTML(meet){
   if(!meet.config.schools.length) return '<div class="empty"><p>Add the schools and rosters in Setup first.</p></div>';
-  let h='<section class="sec"><h2>Roster</h2><p class="note">At the end of the chute: take the card, tap the school, tap the name. The place follows the cards in order, and you can enter a card number when someone arrives out of order.</p>'+
+  let h='<section class="sec"><h2>Roster</h2><p class="note">At the end of the chute: take the card, tap the school, tap the name. The switch at the top chooses the race. The place follows the cards in order, and you can enter a card number when someone arrives out of order.</p>'+
     '<div class="rowf"><button class="btn pri" data-act="go" data-kind="roster">Open the roster</button></div><div class="list">';
   meet.config.races.forEach(r => {
     const st=myStream(meet,r.id,'roster'), n=entryCount(st);
@@ -401,30 +408,45 @@ function rosterHTML(meet){
   return h+'</div></section>';
 }
 
-/* ----- Timer console ----- */
-function timerGroups(meet){
-  const g={live:[], idle:[], done:[]};
-  meet.config.races.forEach((race,idx) => { const st=myStream(meet,race.id,'timer'), o={race, idx, st};
-    if(!st||!st.startedAt) g.idle.push(o); else if(!st.endedAt) g.live.push(o); else g.done.push(o); });
-  g.live.sort((a,b) => a.st.startedAt-b.st.startedAt);   /* a running race keeps its spot when another one starts */
-  return g;
+/* ----- race-day consoles: one race on screen at a time, chosen with the switch at the top ----- */
+function activeRace(meet,kind){
+  const a=S.ui.active||(S.ui.active={});
+  return raceOf(meet,a[kind])||meet.config.races[0]||null;
 }
+function switchHTML(meet,kind){
+  const cur=activeRace(meet,kind);
+  return '<div class="rswitch" role="tablist" style="--n:'+Math.max(1,meet.config.races.length)+'">'+meet.config.races.map((r,idx) =>
+    '<button role="tab" class="rs c'+(idx%3)+'" aria-selected="'+(!!cur&&r.id===cur.id)+'" data-tap="switch" data-race="'+esc(r.id)+'"><b>'+esc(r.name)+'</b><span data-rsinfo="'+esc(r.id)+'"></span></button>').join('')+'</div>';
+}
+/* Columns for n big buttons that share the whole screen; an odd last button stretches to finish its row. */
+function gridCols(n){ return window.innerWidth>=700?(n<=2?Math.max(1,n):n<=4?2:n<=9?3:4):(n<=3?1:n<=10?2:3); }
+function spanCSS(n,cols){ const rem=n%cols; return rem?'grid-column:span '+(cols-rem+1)+';':''; }
+function footHTML(buttons){
+  return '<div class="lockfoot"><div class="last" id="last"></div><div class="footrow">'+buttons+
+    '<button class="btn hold" data-hold="exit-lock"><span>Hold: exit</span></button></div>'+WAKENOTE+'</div>';
+}
+function noRaceHTML(){ return '<main class="lock"><div class="done-card"><h2>No races</h2><p class="note">Add a race in Setup first.</p></div>'+footHTML('')+'</main>'; }
+
+/* ----- Timer console ----- */
 function lockTimerHTML(meet){
-  const g=timerGroups(meet), mini=g.done.map(o => esc(o.race.name)+' ended, '+o.st.taps.length).join(' · ');
-  let body;
-  if(!g.live.length&&!g.idle.length){
-    body='<div class="done-card"><h2>All races ended</h2><p class="note">'+esc(g.done.map(o => o.race.name+': '+plural(o.st.taps.length,'time')).join('. '))+'. Show the code to the organizer before you leave.</p>'+
-      '<button class="btn pri" data-act="send">Send</button></div>';
+  const race=activeRace(meet,'timer'); if(!race) return noRaceHTML();
+  const id=esc(race.id), st=myStream(meet,race.id,'timer');
+  const anyLive=meet.config.races.some(r => { const s=myStream(meet,r.id,'timer'); return !!(s&&s.startedAt&&!s.endedAt); });
+  let body, hold='';
+  if(!st||!st.startedAt){
+    body='<button class="pad start" data-tap="start" data-race="'+id+'"><b>START</b><span>'+esc(race.name)+'</span></button>';
+  }else if(!st.endedAt){
+    body='<button class="pad c'+(raceIdx(meet,race.id)%3)+'" data-tap="time" data-race="'+id+'"><span class="pad-label">'+esc(race.name)+'</span>'+
+      '<span class="pad-clock" data-clock="'+id+'">0:00.0</span><span class="pad-num" data-next="'+id+'">1</span><span class="pad-sub">tap each finisher</span></button>';
+    hold='<button class="btn hold" data-hold="end-race" data-race="'+id+'"><span data-endlabel="'+id+'">'+endLabel(race,st)+'</span></button>';
   }else{
-    body='<div class="pads'+(g.live.length===1&&!g.idle.length?' n1':'')+'">'+
-      g.live.map(o => '<button class="pad c'+(o.idx%3)+'" data-tap="time" data-race="'+esc(o.race.id)+'"><span class="pad-label">'+esc(o.race.name)+'</span>'+
-        '<span class="pad-clock" data-clock="'+esc(o.race.id)+'">0:00.0</span><span class="pad-num" data-next="'+esc(o.race.id)+'">1</span><span class="pad-sub">tap each finisher</span></button>').join('')+
-      g.idle.map(o => '<button class="pad start'+(g.live.length?' small':'')+'" data-tap="start" data-race="'+esc(o.race.id)+'"><b>START</b><span>'+esc(o.race.name)+'</span></button>').join('')+'</div>';
+    body='<div class="done-card"><h2>'+esc(race.name)+' ended</h2><p class="note">'+plural(st.taps.length,'time')+' recorded. '+
+      (anyLive?'Another race is still running. Switch to it at the top.':'When every race is done, send your times to the organizer.')+'</p>'+
+      (anyLive?'':'<button class="btn pri" data-act="send">Send</button>')+'</div>';
+    hold='<button class="btn hold" data-hold="resume-race" data-race="'+id+'"><span>Hold: resume '+esc(race.name)+'</span></button>';
   }
-  return '<main class="lock"><div class="lockbar"><span class="race">Timer</span><span class="mini">'+mini+'</span></div>'+body+
-    '<div class="lockfoot"><div class="last" id="last"></div><div class="footrow"><button class="btn" data-act="undo-time">Undo last</button>'+
-    g.live.map(o => '<button class="btn hold" data-hold="end-race" data-race="'+esc(o.race.id)+'"><span data-endlabel="'+esc(o.race.id)+'">'+endLabel(o.race,o.st)+'</span></button>').join('')+
-    '<button class="btn hold" data-hold="exit-lock"><span>Hold: exit</span></button></div>'+WAKENOTE+'</div></main>';
+  return '<main class="lock">'+switchHTML(meet,'timer')+'<div class="stage">'+body+'</div>'+
+    footHTML('<button class="btn" data-act="undo-time">Undo last</button>'+hold)+'</main>';
 }
 function endLabel(race,st){ return esc(st.taps.length?'Hold: end '+race.name:'Hold: cancel '+race.name+' start'); }
 function undoTimer(meet){
@@ -441,26 +463,13 @@ function raceSchools(meet,raceId){
   return withRunners.length?withRunners:meet.config.schools;
 }
 function lockSchoolHTML(meet){
-  const open=[], closed=[];
-  meet.config.races.forEach((race,idx) => { const st=myStream(meet,race.id,'school'); (st&&st.open?open:closed).push({race, idx, st}); });
-  let body='<div class="scols">';
-  open.forEach(o => {
-    const list=raceSchools(meet,o.race.id), nt=list.length+1;
-    const cs=open.length>1?1:(nt>10?3:2), cl=open.length>1?(nt>6?2:1):(nt<=4?2:nt<=9?3:4);
-    body+='<section class="scol c'+(o.idx%3)+'"><div class="scol-h"><b>'+esc(o.race.name)+'</b><span data-scount="'+esc(o.race.id)+'">0</span></div>'+
-      '<div class="tiles" style="--cols-s:'+cs+';--cols-l:'+cl+'">'+list.map(s => '<button class="tile" data-tap="school" data-race="'+esc(o.race.id)+'" data-s="'+esc(s.id)+
-        '" style="background:'+esc(s.color)+';color:'+inkFor(s.color)+'"><b>'+esc(s.name)+'</b><i data-count="'+esc(o.race.id+'|'+s.id)+'">0</i></button>').join('')+
-      '<button class="tile unknown" data-tap="school" data-race="'+esc(o.race.id)+'" data-s=""><b>Not sure</b><i data-count="'+esc(o.race.id)+'|">0</i></button></div></section>';
-  });
-  body+='</div>';
-  const starts=closed.map(o => '<button class="pad start'+(open.length?' small':'')+'" data-tap="school-open" data-race="'+esc(o.race.id)+'"><b>OPEN</b><span>'+esc(o.race.name)+
-    (entryCount(o.st)?' ('+entryCount(o.st)+')':'')+'</span></button>').join('');
-  if(!open.length) body='<div class="pads">'+starts+'</div>';
-  else if(starts) body+='<div class="pads" style="flex:0 0 64px;flex-direction:row">'+starts+'</div>';
-  return '<main class="lock"><div class="lockbar"><span class="race">School taps</span><span class="mini">in finish order</span></div>'+body+
-    '<div class="lockfoot"><div class="last" id="last"></div><div class="footrow"><button class="btn" data-act="undo-school">Undo last</button>'+
-    open.map(o => '<button class="btn hold" data-hold="close-school" data-race="'+esc(o.race.id)+'"><span>Hold: close '+esc(o.race.name)+'</span></button>').join('')+
-    '<button class="btn hold" data-hold="exit-lock"><span>Hold: exit</span></button></div>'+WAKENOTE+'</div></main>';
+  const race=activeRace(meet,'school'); if(!race) return noRaceHTML();
+  const id=esc(race.id), list=raceSchools(meet,race.id), n=list.length+1, cols=gridCols(n);
+  return '<main class="lock">'+switchHTML(meet,'school')+'<div class="frame c'+(raceIdx(meet,race.id)%3)+'"><div class="tiles" style="--cols:'+cols+'">'+
+    list.map(s => '<button class="tile" data-tap="school" data-race="'+id+'" data-s="'+esc(s.id)+'" style="background:'+esc(s.color)+';color:'+inkFor(s.color)+'"><b>'+esc(s.name)+
+      '</b><i data-count="'+esc(race.id+'|'+s.id)+'">0</i></button>').join('')+
+    '<button class="tile unknown" data-tap="school" data-race="'+id+'" data-s="" style="'+spanCSS(n,cols)+'"><b>Not sure</b><i data-count="'+id+'|">0</i></button></div></div>'+
+    footHTML('<button class="btn" data-act="undo-school">Undo last</button>')+'</main>';
 }
 
 /* ----- Roster console ----- */
@@ -468,34 +477,31 @@ const placeOverride={};
 function rosterFilled(st){ const f={}; if(st) st.picks.forEach(p => { f[p.p]=p.u; }); return f; }
 function rosterNext(meet,raceId){ return placeOverride[raceId]||X.nextPlace(rosterFilled(myStream(meet,raceId,'roster'))); }
 function lockRosterHTML(meet){
-  const school=S.ui.rosterSchool?schoolOf(meet,S.ui.rosterSchool):null;
+  const race=activeRace(meet,'roster'); if(!race) return noRaceHTML();
+  const id=esc(race.id), ci=raceIdx(meet,race.id)%3, school=S.ui.rosterSchool?schoolOf(meet,S.ui.rosterSchool):null;
   if(!school){
-    const nt=meet.config.schools.length;
-    return '<main class="lock"><div class="lockbar"><span class="race">Roster</span><span class="mini">'+
-      meet.config.races.map(r => esc(r.name)+' next '+rosterNext(meet,r.id)).join(' · ')+'</span></div>'+
-      '<div class="tiles roster-tiles" style="--cols-s:'+(nt>8?3:2)+';--cols-l:'+(nt<=4?2:nt<=9?3:4)+'">'+meet.config.schools.map(s =>
-        '<button class="tile" data-act="roster-school" data-s="'+esc(s.id)+'" style="background:'+esc(s.color)+';color:'+inkFor(s.color)+'"><b>'+esc(s.name)+'</b></button>').join('')+'</div>'+
-      '<div class="lockfoot"><div class="last" id="last"></div><div class="footrow"><button class="btn" data-act="undo-pick">Undo last name</button>'+
-      '<button class="btn hold" data-hold="exit-lock"><span>Hold: exit</span></button></div>'+WAKENOTE+'</div></main>';
+    const list=meet.config.schools, n=list.length, cols=gridCols(n);
+    return '<main class="lock">'+switchHTML(meet,'roster')+'<div class="frame c'+ci+'"><div class="tiles roster-tiles" style="--cols:'+cols+'">'+
+      list.map((s,k) => '<button class="tile" data-act="roster-school" data-s="'+esc(s.id)+'" style="background:'+esc(s.color)+';color:'+inkFor(s.color)+';'+(k===n-1?spanCSS(n,cols):'')+'"><b>'+esc(s.name)+'</b></button>').join('')+
+      '</div></div>'+footHTML('<button class="btn" data-act="undo-pick">Undo last name</button>')+'</main>';
   }
-  let races=meet.config.races.filter(r => meet.config.runners.some(u => u.s===school.id&&u.r===r.id));
-  if(!races.length) races=meet.config.races;
-  let body='<div class="names">';
-  races.forEach(r => {
-    const st=myStream(meet,r.id,'roster'), filled=rosterFilled(st), placeOf={}; Object.keys(filled).forEach(p => { placeOf[filled[p]]=+p; });
-    const list=meet.config.runners.filter(u => u.s===school.id&&u.r===r.id)
-      .concat(((st&&st.added)||[]).filter(a => a.s===school.id).map(a => ({id:a.id, n:a.n})))
-      .sort((a,b) => X.nameKey(a.n).localeCompare(X.nameKey(b.n)));
-    const over=placeOverride[r.id];
-    body+='<section class="sec"><div class="names-h c'+(raceIdx(meet,r.id)%3)+'"><b>'+esc(r.name)+'</b>'+
-      '<button class="btn sm'+(over?' card':'')+'" data-act="place-pad" data-race="'+esc(r.id)+'">'+(over?'Card '+over:'Place '+rosterNext(meet,r.id))+' · change</button></div><div class="namegrid">'+
-      list.filter(u => !placeOf[u.id]).map(u => '<button class="nm" data-act="pick" data-race="'+esc(r.id)+'" data-u="'+esc(u.id)+'">'+esc(u.n)+'</button>').join('')+
-      '<button class="nm add" data-act="add-runner" data-race="'+esc(r.id)+'">Not on the list</button>'+
-      list.filter(u => placeOf[u.id]).map(u => '<button class="nm picked" data-act="unpick" data-race="'+esc(r.id)+'" data-u="'+esc(u.id)+'" data-confirm="Tap again to remove from place '+placeOf[u.id]+'">'+placeOf[u.id]+' · '+esc(u.n)+'</button>').join('')+
-      '</div></section>';
-  });
-  body+='</div>';
-  return '<main class="lock"><div class="lockbar"><button class="btn sm" data-act="roster-back">&lsaquo; Schools</button><span class="race">'+esc(school.name)+'</span></div>'+body+'</main>';
+  const st=myStream(meet,race.id,'roster'), filled=rosterFilled(st), placeOf={}; Object.keys(filled).forEach(p => { placeOf[filled[p]]=+p; });
+  const list=meet.config.runners.filter(u => u.s===school.id&&u.r===race.id)
+    .concat(((st&&st.added)||[]).filter(a => a.s===school.id).map(a => ({id:a.id, n:a.n})))
+    .sort((a,b) => X.nameKey(a.n).localeCompare(X.nameKey(b.n)));
+  /* every name keeps its position for the whole race; the grid is sized so the team fills the screen */
+  const n=list.length+1, wide=window.innerWidth>=700, avail=Math.max(160, window.innerHeight-120), maxCols=wide?4:3;
+  let cols=(wide&&n>6)?2:1;
+  while(cols<maxCols&&Math.ceil(n/cols)*58>avail) cols++;
+  const scroll=Math.ceil(n/cols)*46>avail, over=placeOverride[race.id];
+  return '<main class="lock"><div class="lockbar"><button class="btn sm" data-act="roster-back">&lsaquo; Back</button>'+
+    '<span class="race">'+esc(school.name)+' &middot; '+esc(race.name)+'</span>'+
+    '<button class="btn sm'+(over?' card':'')+'" data-act="place-pad" data-race="'+id+'">'+(over?'Card '+over:'Place '+rosterNext(meet,race.id))+' &middot; edit</button></div>'+
+    '<div class="names'+(scroll?' scrolly':'')+'" style="--cols:'+cols+'">'+
+    list.map(u => placeOf[u.id]
+      ?'<button class="nm picked" data-act="unpick" data-race="'+id+'" data-u="'+esc(u.id)+'" data-confirm="Tap again to remove from place '+placeOf[u.id]+'"><i>'+placeOf[u.id]+'</i> '+esc(u.n)+'</button>'
+      :'<button class="nm" data-act="pick" data-race="'+id+'" data-u="'+esc(u.id)+'">'+esc(u.n)+'</button>').join('')+
+    '<button class="nm add" data-act="add-runner" data-race="'+id+'" style="'+spanCSS(n,cols)+'">Not on the list</button></div></main>';
 }
 function rosterPick(meet,raceId,uid,name){
   const st=myStream(meet,raceId,'roster',true), filled=rosterFilled(st);
@@ -511,24 +517,27 @@ function rosterPick(meet,raceId,uid,name){
 function softLock(){
   const lock=S.ui.lock, meet=curMeet(); if(!lock||!meet) return;
   const last=$('last'), items=[];
+  const info=(raceId,html) => { const el=document.querySelector('[data-rsinfo="'+raceId+'"]'); if(el) el.innerHTML=html; };
   if(lock.kind==='timer'){
-    meet.config.races.forEach(r => { const st=myStream(meet,r.id,'timer'); if(!st||!st.startedAt) return;
+    meet.config.races.forEach(r => { const st=myStream(meet,r.id,'timer');
+      if(!st||!st.startedAt){ info(r.id,'not started'); return; }
+      info(r.id, st.endedAt?'ended &middot; '+st.taps.length:'<span data-clock="'+esc(r.id)+'"></span> &middot; '+st.taps.length);
       const el=document.querySelector('[data-next="'+r.id+'"]'); if(el) el.textContent=st.taps.length+1;
       const lab=document.querySelector('[data-endlabel="'+r.id+'"]'); if(lab) lab.innerHTML=endLabel(r,st);
       st.taps.forEach((t,i) => items.push({t, txt:r.name+' '+(i+1)+'  '+fmtTime(t-st.startedAt)})); });
-    if(last) last.textContent=items.length?items.sort((a,b) => a.t-b.t).slice(-3).map(x => x.txt).join('     '):'No times yet. False start? Hold the cancel button.';
+    if(last&&!last.classList.contains('say')) last.textContent=items.length?items.sort((a,b) => a.t-b.t).slice(-3).map(x => x.txt).join('     '):'No times yet. False start? Hold the cancel button.';
     tickClock();
   }else if(lock.kind==='school'){
-    meet.config.races.forEach(r => { const st=myStream(meet,r.id,'school'); if(!st) return;
-      const el=document.querySelector('[data-scount="'+r.id+'"]'); if(el) el.textContent=st.taps.length;
-      const counts={}; st.taps.forEach((x,i) => { const k=r.id+'|'+(x.s||''); counts[k]=(counts[k]||0)+1;
+    meet.config.races.forEach(r => { const st=myStream(meet,r.id,'school'), counts={};
+      info(r.id,(st?st.taps.length:0)+' tapped'); if(!st) return;
+      st.taps.forEach((x,i) => { const k=r.id+'|'+(x.s||''); counts[k]=(counts[k]||0)+1;
         const sc=x.s?schoolOf(meet,x.s):null; items.push({t:x.t, txt:r.name+' '+(i+1)+'  '+(sc?sc.name:'Not sure')}); });
       document.querySelectorAll('[data-count^="'+r.id+'|"]').forEach(el2 => { el2.textContent=counts[el2.getAttribute('data-count')]||0; }); });
-    if(last) last.textContent=items.length?items.sort((a,b) => a.t-b.t).slice(-3).map(x => x.txt).join('     '):'No taps yet';
-  }else if(last){
-    meet.config.races.forEach(r => { const st=myStream(meet,r.id,'roster'); if(!st) return; const rm=runnerMap(meet,r.id);
-      st.picks.forEach(p => items.push({t:p.t||0, txt:r.name+' '+p.p+'  '+((rm[p.u]||{}).n||'?')})); });
-    last.textContent=items.length?'Last: '+items.sort((a,b) => a.t-b.t).slice(-2).map(x => x.txt).join('     '):'No names yet';
+    if(last&&!last.classList.contains('say')) last.textContent=items.length?items.sort((a,b) => a.t-b.t).slice(-3).map(x => x.txt).join('     '):'No taps yet';
+  }else{
+    meet.config.races.forEach(r => { const st=myStream(meet,r.id,'roster'); info(r.id,'next place '+rosterNext(meet,r.id)); if(!st) return;
+      const rm=runnerMap(meet,r.id); st.picks.forEach(p => items.push({t:p.t||0, txt:r.name+' '+p.p+'  '+((rm[p.u]||{}).n||'?')})); });
+    if(last&&!last.classList.contains('say')) last.textContent=items.length?'Last: '+items.sort((a,b) => a.t-b.t).slice(-2).map(x => x.txt).join('     '):'No names yet';
   }
 }
 function tickClock(){
@@ -819,13 +828,13 @@ function act(name,el){
     case 'share-link': withLink(meet, link => navigator.share({title:meet.config.name, text:meet.config.name+' finish line', url:link}).catch(shareFail)); break;
     case 'show-link-qr': withLink(meet, link => { if(link.length>2600){ toast('This meet is too big for one QR code. Text the link instead.'); return; } ov={type:'linkqr', link}; renderOverlay(); }); break;
 
-    case 'timer-resume': st=myStream(meet,raceId,'timer'); if(st){ st.endedAt=null; touchStream(meet,st); S.ui.lock={kind:'timer'}; save(); render(); } break;
+    case 'timer-resume': st=myStream(meet,raceId,'timer'); if(st){ st.endedAt=null; touchStream(meet,st); (S.ui.active=S.ui.active||{}).timer=raceId; S.ui.lock={kind:'timer'}; save(); render(); } break;
+    case 'resume-race': st=myStream(meet,raceId,'timer'); if(st){ st.endedAt=null; touchStream(meet,st); render(); } break;
     case 'reset-stream': st=myStream(meet,raceId,d.kind); if(st){ delete meet.streams[st.id]; save(); render(); toast('Erased'); } break;
     case 'undo-time': undoTimer(meet); break;
     case 'end-race': st=myStream(meet,raceId,'timer'); if(st){
         if(st.taps.length) st.endedAt=Date.now(); else{ st.startedAt=null; st.endedAt=null; toast(raceOf(meet,raceId).name+' start cancelled'); }
         touchStream(meet,st); render(); } break;
-    case 'close-school': st=myStream(meet,raceId,'school'); if(st){ st.open=false; touchStream(meet,st); render(); } break;
     case 'exit-lock': { const k=S.ui.lock?S.ui.lock.kind:'timer'; S.ui.lock=null; S.ui.rosterSchool=null; S.ui.tab=k==='school'?'schools':k; save(); render(); break; }
     case 'undo-school': { let best=null;
       meet.config.races.forEach(rc => { const s2=myStream(meet,rc.id,'school'); if(s2&&s2.taps.length&&(!best||s2.taps[s2.taps.length-1].t>best.taps[best.taps.length-1].t)) best=s2; });
@@ -920,6 +929,11 @@ function bind(el){
 function tap(el){
   const meet=curMeet(), kind=el.dataset.tap, raceId=el.dataset.race, now=Date.now(); let st;
   if(!meet||!S.ui.lock||!raceOf(meet,raceId)) return;
+  if(kind==='switch'){
+    const k=S.ui.lock.kind, cur=activeRace(meet,k);
+    if(cur&&cur.id===raceId) return;   /* a second touch on the same side changes nothing, so no debounce is needed */
+    (S.ui.active=S.ui.active||{})[k]=raceId; save(); render(true); return;
+  }
   if(performance.now()-lockRenderAt<350) return;   /* the screen just changed under the finger: a bounce, not a tap */
   if(kind==='start'){
     st=myStream(meet,raceId,'timer',true); if(st.startedAt) return;
@@ -928,10 +942,8 @@ function tap(el){
     st=myStream(meet,raceId,'timer'); if(!st||!st.startedAt||st.endedAt) return;
     if(now-st.startedAt<1500) return;                /* nobody finishes within 1.5 s of the gun */
     st.taps.push(now); touchStream(meet,st); beep(880); buzz(); flash(el); softLock();
-  }else if(kind==='school-open'){
-    st=myStream(meet,raceId,'school',true); st.open=true; touchStream(meet,st); render();
   }else if(kind==='school'){
-    st=myStream(meet,raceId,'school'); if(!st||!st.open) return;
+    st=myStream(meet,raceId,'school',true);
     st.taps.push({t:now, s:el.dataset.s||null}); touchStream(meet,st); beep(660); buzz(); flash(el); softLock();
   }
 }
@@ -948,12 +960,21 @@ document.addEventListener('pointerup', () => { primeAudio(); cancelHold(); setTi
 document.addEventListener('pointercancel', () => { cancelHold(); pdown=false; });
 document.addEventListener('contextmenu', e => { if(S.ui.lock) e.preventDefault(); });
 document.addEventListener('keydown', e => {
-  /* a Bluetooth clicker taps the pad when exactly one race is running */
+  /* a Bluetooth clicker taps the pad for the race on screen */
   if(!S.ui.lock||S.ui.lock.kind!=='timer'||e.repeat||ov) return;
   if([' ','Enter','PageDown','PageUp','ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].indexOf(e.key)<0) return;
-  const pads=document.querySelectorAll('[data-tap="time"]');
-  if(pads.length===1){ e.preventDefault(); tap(pads[0]); }
+  const pad=document.querySelector('[data-tap="time"]');
+  if(pad){ e.preventDefault(); tap(pad); }
 });
+/* The app sits still like a native screen: nothing drags, bounces or zooms. Only lists that need to scroll do. */
+document.addEventListener('touchmove', e => {
+  const t=e.target; if(!t||!t.closest) return;
+  if(t.closest(S.ui.lock&&!ov?'.scrolly':'.main, .overlay, .scrolly')) return;
+  e.preventDefault();
+}, {passive:false});
+['gesturestart','gesturechange'].forEach(n => document.addEventListener(n, e => e.preventDefault()));
+let resizeT=null;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT=setTimeout(() => { if(S.ui.lock&&!ov) render(true); }, 150); });
 let armed=null, armT=null, armedAt=0;
 document.addEventListener('click', e => {
   primeAudio();

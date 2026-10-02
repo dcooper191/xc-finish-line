@@ -2,7 +2,7 @@
 
 Finish-line timing for cross country meets, built for three volunteers with phones or tablets. It runs in the browser, needs no accounts, and works with no signal once it has been opened.
 
-- **Timer** (at the line): START for each race, then one tap per finisher. Two races can run at once; the pad splits into one button per race.
+- **Timer** (at the line): START for each race, then one tap per finisher. Two races can run at once; a switch at the top chooses which race the big button belongs to.
 - **Schools** (at the line): one tap per finisher on that runner's school, in finish order.
 - **Roster** (end of the chute): take the place card, tap the school, tap the name. The place follows the cards in order; enter the card number when someone arrives out of order.
 - **Results** (organizer): scan each volunteer's code, review the merged list, fix what the cross-checks flag, mark DNS/DNF, and copy the table into a Google Sheet.
