@@ -103,7 +103,7 @@ eq('sort key by last name', [X.nameKey('Ann Zed') > X.nameKey('Zoe Abel'), X.nam
 
 (async () => {
   // ---- meet setup round trip
-  const cfg = {id:'m1', name:'Berkshire Invitational', date:'2026-10-10', ver:123, counter:0, deleted:false,
+  const cfg = {id:'m1', name:'Berkshire Invitational', date:'2026-10-10', ver:123, counter:0, deleted:false, sync:'https://script.google.com/macros/s/AKfycbTEST_123-abc/exec',
     schools:[{id:'s1',name:'Berkshire',color:'#1F7A4D'},{id:'s2',name:'School B',color:'#1B2A5C'}], races:[{id:'g',name:'Girls'},{id:'b',name:'Boys'}], runners:[]};
   let c = 0; for(const s of cfg.schools) for(const r of cfg.races){
     const names = Array.from({length:40}, (_,i) => 'First'+i+' Lastname'+s.id+r.id+i);

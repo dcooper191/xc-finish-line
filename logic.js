@@ -265,14 +265,14 @@ function packConfig(c){
     if(!groups[k]){ groups[k]=[sIdx[u.s], rIdx[u.r], []]; order.push(k); }
     groups[k][2].push(u.id, u.n);
   });
-  return {x:2, i:c.id, n:c.name, d:c.date||'', v:c.ver||0, c:c.counter||0,
+  return {x:2, i:c.id, n:c.name, d:c.date||'', v:c.ver||0, c:c.counter||0, y:c.sync||'',
     s:c.schools.map(function(s){ return [s.id,s.name,s.color]; }),
     r:c.races.map(function(r){ return [r.id,r.name]; }),
     u:order.map(function(k){ return groups[k]; })};
 }
 function unpackConfig(o){
   if(!o||o.x!==2||!o.i||!Array.isArray(o.s)||!Array.isArray(o.r)) return null;
-  var c={id:String(o.i), name:String(o.n||'Meet'), date:String(o.d||''), ver:+o.v||0, counter:+o.c||0, deleted:false,
+  var c={id:String(o.i), name:String(o.n||'Meet'), date:String(o.d||''), ver:+o.v||0, counter:+o.c||0, deleted:false, sync:String(o.y||''),
     schools:o.s.map(function(s){ return {id:String(s[0]), name:String(s[1]||''), color:String(s[2]||'#7D858C')}; }),
     races:o.r.map(function(r){ return {id:String(r[0]), name:String(r[1]||'')}; }), runners:[]};
   (o.u||[]).forEach(function(g){

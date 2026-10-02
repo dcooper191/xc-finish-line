@@ -1,9 +1,9 @@
 /* Offline copy of the app. Change VERSION whenever any file changes, so phones pick up the new copy
    the next time they open the app with a connection. */
-const VERSION = '2026-10-02.1';
+const VERSION = '2026-10-02.2';
 const CACHE = 'xcfl-' + VERSION;
 const ASSETS = ['./', 'index.html', 'styles.css', 'logic.js', 'app.js', 'vendor/qrcode.js', 'vendor/jsQR.js',
-  'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+  'apps-script/Code.gs', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE)

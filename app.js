@@ -14,6 +14,7 @@ function rid(n){ let s=''; while(s.length<n) s+=Math.random().toString(36).slice
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function today(){ const d=new Date(); return d.getFullYear()+'-'+X.pad2(d.getMonth()+1)+'-'+X.pad2(d.getDate()); }
 function plural(n,w){ return n+' '+w+(n===1?'':'s'); }
+function clockStr(ts){ const d=new Date(ts), h=d.getHours(); return ((h%12)||12)+':'+X.pad2(d.getMinutes())+(h<12?' AM':' PM'); }
 function niceDate(iso){
   const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(iso||''); if(!m) return iso||'';
   try{ return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric', year:'numeric'}); }catch(e){ return iso; }
@@ -39,7 +40,7 @@ function adoptStored(str){
   if(!str||str===lastJSON) return false;
   let n=null; try{ n=JSON.parse(str); }catch(e){ return false; }
   if(!n||n.v!==2) return false;
-  S.meets=n.meets||{}; S.meetId=n.meetId; S.deviceId=n.deviceId; S.deviceName=n.deviceName; S.sound=n.sound; lastJSON=str;
+  S.meets=n.meets||{}; S.meetId=n.meetId; S.deviceId=n.deviceId; S.deviceName=n.deviceName; S.sound=n.sound; S.up=n.up||{}; lastJSON=str;
   return true;
 }
 
@@ -202,6 +203,92 @@ function sendSummary(meet){
     .map(st => raceOf(meet,st.raceId).name+' '+KIND_LABEL[st.kind].toLowerCase()+': '+entryCount(st)).join(' · ');
 }
 
+/* ---------- automatic upload to the organizer's Google Sheet ----------
+   Taps are always saved on the phone first. A phone uploads its lists only when it is quiet: when the volunteer
+   leaves the race screen, or two minutes after the last tap. Tapping never waits for the network. */
+function syncUrl(meet){
+  const u=String((meet&&meet.config.sync)||'').trim();
+  return /^https:\/\/script\.google\.com\/(a\/macros\/[^\/\s]+|macros)\/s\/[A-Za-z0-9_-]+\/exec$/.test(u)?u:'';
+}
+function fetchJSON(url, opts){
+  const ac=new AbortController(), t=setTimeout(() => ac.abort(), 25000);
+  return fetch(url, Object.assign({signal:ac.signal, cache:'no-store', redirect:'follow'}, opts||{}))
+    .then(r => { if(!r.ok) throw new Error('The Sheet answered with an error ('+r.status+')'); return r.json(); })
+    .then(v => { clearTimeout(t); return v; }, e => { clearTimeout(t); throw e; });
+}
+/* text/plain keeps this a simple request, which is what a Google Apps Script web app accepts from another site */
+function postSheet(url, body){ return fetchJSON(url, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(body)}); }
+function mySig(meet){ return myStreams(meet).filter(hasData).map(s => s.id+':'+s.updatedAt).sort().join('|'); }
+function upInfo(meet){ return (S.up&&S.up[meet.config.id])||{}; }
+function uploadPending(meet){ const sig=mySig(meet); return !!sig&&sig!==upInfo(meet).sig; }
+function lastActivity(meet){ return myStreams(meet).reduce((m,s) => Math.max(m,s.updatedAt||0), 0); }
+let upBusy=false, upErr=null;
+function maybeUpload(force){
+  const meet=curMeet(), url=syncUrl(meet);
+  if(!meet||!url||upBusy||!uploadPending(meet)) return;
+  if(!force&&S.ui.lock&&Date.now()-lastActivity(meet)<120000) return;   /* someone is still recording */
+  if(navigator.onLine===false){ softHeader(); return; }
+  upBusy=true; softHeader();
+  const sig=mySig(meet), id=meet.config.id;
+  sendPayload(meet).then(code => postSheet(url, {t:'up', meet:id, device:S.deviceId, name:S.deviceName||'', summary:sendSummary(meet), code}))
+    .then(res => { if(!res||!res.ok) throw new Error((res&&res.error)||'The Sheet refused the upload'); (S.up=S.up||{})[id]={sig, at:Date.now()}; upErr=null; save(); },
+          e => { upErr=String((e&&e.message)||e); })
+    .then(() => { upBusy=false; softHeader(); if(ov&&ov.type==='send'){ const el=$('upnote'); if(el) el.outerHTML=upNoteHTML(curMeet()); } });
+}
+function upStatus(meet){
+  if(!meet||!syncUrl(meet)||!myStreams(meet).some(hasData)) return null;
+  if(upBusy) return ['', 'Uploading'];
+  if(uploadPending(meet)) return ['warn', navigator.onLine===false?'Waiting for signal':'Not uploaded yet'];
+  return ['ok', 'Uploaded '+clockStr(upInfo(meet).at||Date.now())];
+}
+function upNoteHTML(meet){
+  const s=upStatus(meet);
+  if(!s) return '<div id="upnote"></div>';
+  if(s[0]==='ok') return '<div class="banner ok" id="upnote"><strong>Everything on this phone has been uploaded to the organizer.</strong>The code below is only a backup.</div>';
+  return '<div class="banner warn" id="upnote"><strong>'+(upBusy?'Uploading now.':'Not uploaded yet.')+'</strong>'+(upBusy?'':'It uploads by itself once the phone has signal. With no signal, show this code to the organizer instead.')+'</div>';
+}
+/* organizer side: collect what the phones uploaded, and send finished results to the Sheet */
+let pullBusy=false, pullInfo=null, sheetMsg=null, sheetBusy=false;
+function streamsSig(meet){ return Object.values(meet.streams).map(s => s.id+':'+(s.updatedAt||0)).sort().join('|'); }
+function pullSheet(manual){
+  const meet=curMeet(), url=syncUrl(meet);
+  if(!meet||!url||pullBusy) return;
+  if(navigator.onLine===false){ if(manual) toast('No connection right now'); return; }
+  pullBusy=true; const before=streamsSig(meet), id=meet.config.id, hadErr=!!(pullInfo&&pullInfo.err);
+  if(manual) render();
+  fetchJSON(url+'?meet='+encodeURIComponent(id)).then(res => {
+    if(!res||!res.ok) throw new Error((res&&res.error)||'The Sheet refused the request');
+    let chain=Promise.resolve(), n=0;
+    (res.uploads||[]).forEach(u => { if(u.device===S.deviceId||!u.code) return; chain=chain.then(() => importCode(u.code)).then(r => { if(r.ok) n++; }); });
+    return chain.then(() => { pullInfo={at:Date.now(), n, err:null}; });
+  }).catch(e => { pullInfo={at:Date.now(), n:0, err:String((e&&e.message)||e)}; }).then(() => {
+    pullBusy=false;
+    const m=S.meets[id], changed=!m||streamsSig(m)!==before||hadErr!==!!pullInfo.err;
+    if(S.ui.tab==='results'&&!S.ui.lock&&!ov&&(manual||changed)){ if(typing()) deferRender(); else render(); }
+    else{ const el=$('pullnote'); if(el) el.textContent=pullNote(); }
+  });
+}
+function pullNote(){
+  if(pullBusy) return 'Checking the Sheet.';
+  if(!pullInfo) return 'Not checked yet.';
+  if(pullInfo.err) return 'Could not reach the Sheet at '+clockStr(pullInfo.at)+'. It will try again; the QR codes still work.';
+  return 'Checked the Sheet at '+clockStr(pullInfo.at)+': '+plural(pullInfo.n,'device')+' uploaded.';
+}
+function sendResults(meet){
+  const url=syncUrl(meet); if(!url||sheetBusy) return;
+  const tabs=meet.config.races.map(r => ({title:meet.config.name+' '+r.name, rows:[['Place','School','Name','Time']].concat(exportRows(meet,r.id))})).filter(t => t.rows.length>1);
+  if(!tabs.length){ toast('There are no results to send yet'); return; }
+  sheetBusy=true; sheetMsg=null; render();
+  postSheet(url, {t:'results', tabs}).then(res => {
+    if(!res||!res.ok) throw new Error((res&&res.error)||'The Sheet refused the results');
+    sheetMsg={kind:'ok', text:'Sent '+plural((res.tabs||tabs).length,'race')+' to the Sheet, one tab each. Sending again replaces them.', link:/^https:\/\/docs\.google\.com\//.test(res.url||'')?res.url:null};
+  }).catch(e => { sheetMsg={kind:'warn', text:'The results did not go through ('+String((e&&e.message)||e)+'). Check the connection and try again, or use Copy.'}; })
+    .then(() => { sheetBusy=false; if(typing()) deferRender(); else render(); });
+}
+setInterval(() => { maybeUpload(false); if(S.ui.tab==='results'&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 20000);
+window.addEventListener('online', () => { softHeader(); maybeUpload(false); });
+window.addEventListener('offline', () => softHeader());
+
 /* ---------- small UI helpers ---------- */
 let toastT=null;
 function toast(msg){
@@ -264,7 +351,7 @@ function deferRender(){ pendingRender=true; if(!flushT) flushT=setTimeout(flushR
 
 function statusPill(){
   if(!storageOK) return ['bad','Not saving'];
-  return offlineReady?['ok','Works offline']:['','Saved on device'];
+  return upStatus(curMeet())||(offlineReady?['ok','Works offline']:['','Saved on device']);
 }
 function softHeader(){ const el=$('pill'); if(el){ const s=statusPill(); el.innerHTML='<span class="dot '+s[0]+'"></span>'+esc(s[1]); } }
 function render(noGuard){
@@ -282,7 +369,7 @@ function render(noGuard){
   const tabs=[['timer','Timer'],['schools','Schools'],['roster','Roster'],['results','Results'],['setup','Setup']];
   app.className='app';
   app.innerHTML='<header class="top"><button class="brand" data-act="tab" data-tab="home"><strong>XC Finish Line</strong><span>'+esc(meet?meet.config.name:'No meet on this device')+'</span></button>'+
-    '<span class="pill" id="pill"><span class="dot '+s[0]+'"></span>'+esc(s[1])+'</span>'+
+    '<button class="pill" id="pill" data-act="upload-now"><span class="dot '+s[0]+'"></span>'+esc(s[1])+'</button>'+
     (meet?'<button class="btn sm pri" data-act="send">Send</button>':'')+'</header>'+
     '<nav class="tabs" role="tablist">'+tabs.map(t => '<button role="tab" aria-selected="'+(S.ui.tab===t[0])+'" data-act="tab" data-tab="'+t[0]+'">'+t[1]+'</button>').join('')+'</nav>'+
     '<main id="main" class="main"><div class="wrap">'+mainHTML(meet)+'</div></main>';
@@ -314,7 +401,8 @@ function homeHTML(meet){
     '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses. Switch races at the top.</span></button>'+
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
     '<button class="role c2" data-act="go" data-kind="roster"><b>Roster</b><span>End of the chute. Take each card, tap the school, then the runner\'s name.</span></button>'+
-    '</section><section class="sec"><p class="note">When your race is over, press Send and show the code to the organizer. Organizer: Results and Setup are in the tabs above.</p></section>';
+    '</section><section class="sec"><p class="note">'+(syncUrl(meet)?'When you are done, hold Exit. Your taps upload by themselves once the phone has signal, and the top of the screen says Uploaded. With no signal, press Send and show the code to the organizer.'
+      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+' Organizer: Results and Setup are in the tabs above.</p></section>';
 }
 
 /* ----- Setup ----- */
@@ -350,6 +438,15 @@ function setupHTML(meet){
   });
   h+='</div><div class="rowf"><button class="btn" data-act="add-school">Add school</button></div></section>';
 
+  const su=syncUrl(meet), raw=String(c.sync||'').trim();
+  h+='<section class="sec"><h2>Automatic upload to a Google Sheet</h2><p class="note">Optional, and set up once for the season. With it, each phone uploads its own taps when it has signal, and Results collects them without scanning. Nothing is sent while someone is recording.</p>'+
+     '<ol class="steps"><li>Make a Google Sheet. In it, open Extensions, then Apps Script.</li><li>Press Copy the script here, and paste it over everything in the editor. Save.</li>'+
+     '<li>Deploy, New deployment, type Web app. Execute as: Me. Who has access: Anyone. Deploy, and approve the permission request.</li>'+
+     '<li>Copy the web app link (it ends in /exec) and paste it below. Then send the meet link to volunteers; it carries this setting.</li></ol>'+
+     '<div class="rowf"><button class="btn" data-act="copy-script">Copy the script</button></div><textarea id="scriptout" class="linkbox" readonly hidden></textarea>'+
+     '<label class="field"><span>Web app link</span><input type="text" id="syncurl" data-bind="sync-url" value="'+esc(raw)+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
+     (raw&&!su?'<div class="banner warn"><strong>That is not a web app link.</strong>It should start with https://script.google.com/ and end in /exec.</div>':'')+
+     '<div class="rowf"><button class="btn'+(su?' pri':'')+'" data-act="sync-test">Test the connection</button></div></section>';
   h+='<section class="sec"><h2>Send the meet to volunteers</h2><p class="note">The link contains the races, schools and rosters, so treat it like the roster itself. Each volunteer opens it once with a connection. Send it again after any change.</p>'+
      '<div class="rowf"><button class="btn pri" data-act="copy-link">Copy meet link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
      '<button class="btn" data-act="show-link-qr">Show as QR code</button></div><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
@@ -441,7 +538,7 @@ function lockTimerHTML(meet){
     hold='<button class="btn hold" data-hold="end-race" data-race="'+id+'"><span data-endlabel="'+id+'">'+endLabel(race,st)+'</span></button>';
   }else{
     body='<div class="done-card"><h2>'+esc(race.name)+' ended</h2><p class="note">'+plural(st.taps.length,'time')+' recorded. '+
-      (anyLive?'Another race is still running. Switch to it at the top.':'When every race is done, send your times to the organizer.')+'</p>'+
+      (anyLive?'Another race is still running. Switch to it at the top.':(syncUrl(meet)?'When every race is done, hold Exit. The times upload by themselves when the phone has signal; Send shows the backup code.':'When every race is done, send your times to the organizer.'))+'</p>'+
       (anyLive?'':'<button class="btn pri" data-act="send">Send</button>')+'</div>';
     hold='<button class="btn hold" data-hold="resume-race" data-race="'+id+'"><span>Hold: resume '+esc(race.name)+'</span></button>';
   }
@@ -562,8 +659,12 @@ function resultsHTML(meet){
   const races=meet.config.races;
   if(!races.length) return '<div class="empty"><p>Add a race in Setup first.</p></div>';
   let rid=S.ui.resRace; if(!races.some(r => r.id===rid)){ rid=races[0].id; S.ui.resRace=rid; }
-  let h='<section class="sec"><h2>Collected</h2><p class="note">Scan each volunteer\'s code after the race. Lists recorded on this device are already here.</p>'+checklistHTML(meet)+
-    '<div class="rowf"><button class="btn pri" data-act="scan">Scan a code</button><button class="btn" data-act="paste-open">Paste a code</button></div></section>';
+  const su=syncUrl(meet);
+  let h='<section class="sec"><h2>Collected</h2><p class="note">'+(su?'Phones upload to the Sheet by themselves once they have signal, and this screen checks it every 20 seconds. For a phone with no signal, scan its code.'
+      :'Scan each volunteer\'s code after the race. Lists recorded on this device are already here.')+'</p>'+checklistHTML(meet)+
+    (su?'<p class="status" id="pullnote">'+esc(pullNote())+'</p>':'')+
+    '<div class="rowf">'+(su?'<button class="btn pri" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check the Sheet now</button>':'')+
+    '<button class="btn'+(su?'':' pri')+'" data-act="scan">Scan a code</button><button class="btn" data-act="paste-open">Paste a code</button></div></section>';
   const race=raceOf(meet,rid), v=view(meet,rid), nT=v.times.length, nS=v.schools.length, nR=v.R?v.R.picks.length:0, fin=v.r.finishers;
   h+='<section class="sec">';
   if(races.length>1) h+='<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="res-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>';
@@ -630,9 +731,12 @@ function resultsHTML(meet){
        '</tbody></table></div></section>';
   }
 
-  h+='<section class="sec"><h2>Export</h2><p class="note">Columns are Place, School, Name, Time. Copy, then paste into cell A1 of a Google Sheet.</p><div class="rowf">'+
-     '<button class="btn pri" data-act="copy-tsv">Copy '+esc(race.name)+'</button>'+(races.length>1?'<button class="btn" data-act="copy-all">Copy all races</button>':'')+
-     '<button class="btn" data-act="dl-csv">Download CSV</button></div><textarea id="outtext" class="out" readonly hidden></textarea></section>';
+  h+='<section class="sec"><h2>Export</h2><p class="note">Columns are Place, School, Name, Time.'+(su?' Sending puts every race on its own tab of your Sheet.':' Copy, then paste into cell A1 of a Google Sheet.')+'</p><div class="rowf">'+
+     (su?'<button class="btn pri" data-act="send-results"'+(sheetBusy?' disabled':'')+'>'+(sheetBusy?'Sending':'Send results to the Sheet')+'</button>':'')+
+     '<button class="btn'+(su?'':' pri')+'" data-act="copy-tsv">Copy '+esc(race.name)+'</button>'+(races.length>1?'<button class="btn" data-act="copy-all">Copy all races</button>':'')+
+     '<button class="btn" data-act="dl-csv">Download CSV</button></div>'+
+     (sheetMsg?'<div class="banner '+sheetMsg.kind+'"><strong>'+esc(sheetMsg.text)+'</strong>'+(sheetMsg.link?'<a href="'+esc(sheetMsg.link)+'" target="_blank" rel="noopener">Open the Sheet</a>':'')+'</div>':'')+
+     '<textarea id="outtext" class="out" readonly hidden></textarea></section>';
 
   const lists={timer:raceStreams(meet,rid,'timer'), school:raceStreams(meet,rid,'school'), roster:raceStreams(meet,rid,'roster')};
   h+='<section class="sec"><h3>Corrections</h3><div class="rowf">'+
@@ -681,7 +785,7 @@ function renderOverlay(){
   clearInterval(ovTimer); ovTimer=null;
   let h='';
   if(ov.type==='send'){
-    h=sheet('Send to the organizer', '<p class="note">'+esc(ov.summary)+'</p>'+
+    h=sheet('Send to the organizer', '<p class="note">'+esc(ov.summary)+'</p>'+upNoteHTML(meet)+
       (ov.frames?'<div class="qrbox"><canvas id="qr"></canvas></div><div class="qrmeta" id="qrmeta"></div>'+
         '<p class="note">Hold this screen up to the organizer\'s camera. '+(ov.frames.length>1?'The code changes on its own; keep holding until their screen says it has every part.':'')+'</p>'+
         '<div class="rowf"><button class="btn" data-act="copy-send">Copy as text instead</button>'+(navigator.share?'<button class="btn" data-act="share-send">Share as text</button>':'')+'</div><textarea id="sendout" class="linkbox" readonly hidden></textarea>'
@@ -718,7 +822,7 @@ function renderOverlay(){
 function openSend(){
   const meet=curMeet(); if(!meet) return;
   if(!myStreams(meet).some(hasData)){ toast('Nothing recorded on this device yet'); return; }
-  ov={type:'send', frames:null, idx:0, summary:sendSummary(meet)}; renderOverlay();
+  ov={type:'send', frames:null, idx:0, summary:sendSummary(meet)}; renderOverlay(); maybeUpload(true);
   sendPayload(meet).then(code => { if(!ov||ov.type!=='send') return; ov.code=code; ov.frames=X.makeFrames(code,500); renderOverlay(); });
 }
 const CAM_BLOCKED='<div class="banner warn"><strong>The camera is not available here.</strong>Allow camera access for this site, or use a photo or paste the code.</div>';
@@ -777,7 +881,7 @@ function scanFromFile(file){
 /* ---------- actions ---------- */
 function newMeet(){
   const prev=curMeet(), id='m'+rid(6);
-  const cfg={id, name:'New meet', date:today(), ver:Date.now(), deleted:false, counter:prev?prev.config.counter||0:0,
+  const cfg={id, name:'New meet', date:today(), ver:Date.now(), deleted:false, counter:prev?prev.config.counter||0:0, sync:prev?prev.config.sync||'':'',
     schools:prev?clone(prev.config.schools):[{id:'s'+rid(3), name:'Berkshire', color:'#1F7A4D'}],
     races:prev?clone(prev.config.races):[{id:'g', name:'Girls'},{id:'b', name:'Boys'}],
     runners:prev?clone(prev.config.runners):[]};
@@ -805,7 +909,7 @@ function act(name,el){
   const meet=curMeet(), d=el?el.dataset:{}, i=d.i!=null?+d.i:-1, raceId=d.race;
   let st, r;
   switch(name){
-    case 'tab': S.ui.tab=d.tab; S.ui.openRow=null; save(); render(); $('main').scrollTop=0; break;
+    case 'tab': S.ui.tab=d.tab; S.ui.openRow=null; save(); render(); $('main').scrollTop=0; if(d.tab==='results') pullSheet(false); break;
     case 'go': if(!meet) break;
       if(d.kind!=='timer'&&!meet.config.schools.length){ toast('Add the schools in Setup first'); break; }
       S.ui.lock={kind:d.kind}; S.ui.rosterSchool=null; save(); render(); break;
@@ -834,8 +938,23 @@ function act(name,el){
     case 'undo-time': undoTimer(meet); break;
     case 'end-race': st=myStream(meet,raceId,'timer'); if(st){
         if(st.taps.length) st.endedAt=Date.now(); else{ st.startedAt=null; st.endedAt=null; toast(raceOf(meet,raceId).name+' start cancelled'); }
-        touchStream(meet,st); render(); } break;
-    case 'exit-lock': { const k=S.ui.lock?S.ui.lock.kind:'timer'; S.ui.lock=null; S.ui.rosterSchool=null; S.ui.tab=k==='school'?'schools':k; save(); render(); break; }
+        touchStream(meet,st); render();
+        if(!meet.config.races.some(rc => { const s2=myStream(meet,rc.id,'timer'); return !!(s2&&s2.startedAt&&!s2.endedAt); })) maybeUpload(true); } break;
+    case 'exit-lock': { const k=S.ui.lock?S.ui.lock.kind:'timer'; S.ui.lock=null; S.ui.rosterSchool=null; S.ui.tab=k==='school'?'schools':k; save(); render(); maybeUpload(true); break; }
+    case 'upload-now': if(!meet||!syncUrl(meet)) break;
+      if(upBusy) toast('Uploading now'); else if(!uploadPending(meet)) toast(myStreams(meet).some(hasData)?'Everything on this phone is uploaded':'Nothing recorded on this phone yet');
+      else if(navigator.onLine===false) toast('No signal. It will upload by itself later, or use Send for the code.');
+      else{ maybeUpload(true); toast('Uploading'); } break;
+    case 'pull-sheet': pullSheet(true); break;
+    case 'send-results': sendResults(meet); break;
+    case 'sync-test': { const u=syncUrl(meet); if(!u){ toast('Paste the web app link first. It ends in /exec.'); break; }
+      /* checks both directions: reading (what Results does) and writing (what the phones do) */
+      toast('Checking the Sheet');
+      fetchJSON(u+'?ping=1').then(res => { if(!res||!res.ok) throw new Error('read');
+        return postSheet(u,{t:'ping'}).then(r2 => toast(r2&&r2.ok?'Connected to "'+res.sheet+'". Uploads will work.':'Connected to "'+res.sheet+'", but it is running an older script. Paste the script again and redeploy.'),
+          () => toast('Reading works, but uploading was blocked. Redeploy with access set to Anyone.')); },
+        () => toast('Could not reach the Sheet. Check the link, and that access is set to Anyone.')); break; }
+    case 'copy-script': if(scriptText) copyText(scriptText, 'Script copied. Paste it into Apps Script.', 'scriptout'); else toast('Still loading the script. Try again in a moment.'); break;
     case 'undo-school': { let best=null;
       meet.config.races.forEach(rc => { const s2=myStream(meet,rc.id,'school'); if(s2&&s2.taps.length&&(!best||s2.taps[s2.taps.length-1].t>best.taps[best.taps.length-1].t)) best=s2; });
       if(!best){ toast('Nothing to undo'); break; }
@@ -901,6 +1020,7 @@ function bind(el){
     case 'meet-date': meet.config.date=val; touchConfig(meet); break;
     case 'device-name': S.deviceName=val.trim().slice(0,30); save(); break;
     case 'sound': S.sound=val==='1'; save(); break;
+    case 'sync-url': meet.config.sync=val.trim(); touchConfig(meet); pendingRender=true; break;
     case 'cell-order': S.cellOrder=val==='fl'?'fl':'lf'; save(); break;
     case 'school-name': meet.config.schools[i].name=val.trim(); touchConfig(meet); break;
     case 'school-color': meet.config.schools[i].color=val; touchConfig(meet); pendingRender=true; break;
@@ -1008,7 +1128,10 @@ function boot(){
     navigator.serviceWorker.ready.then(() => { offlineReady=true; softHeader(); }).catch(() => {});
   }
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  fetch('apps-script/Code.gs').then(r => r.ok?r.text():'').then(t => { scriptText=t; }, () => {});
+  setTimeout(() => maybeUpload(false), 3000);
 }
+let scriptText='';
 window.addEventListener('hashchange', () => { const m=/#m=([A-Za-z0-9_-]+)/.exec(location.hash||''); if(m) importCode(m[1]).then(res => { toast(res.msg); if(res.ok) render(); }); });
 boot();
 })();
