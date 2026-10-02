@@ -168,6 +168,21 @@ function syncRoster(runners, schoolId, raceId, lines, counter){
   });
   return {runners:keep.concat(group), counter:counter};
 }
+/* One pasted roster line -> "First Last". Accepts a plain name, "Last, First", or two spreadsheet cells
+   (tab-separated; read as last name then first name unless cellsLastFirst is false). */
+function parseNameLine(line, cellsLastFirst){
+  function clean(x){ return String(x).replace(/\s+/g,' ').trim(); }
+  line=String(line==null?'':line);
+  var parts;
+  if(line.indexOf('\t')>=0){
+    parts=line.split('\t').map(clean).filter(Boolean);
+    if(parts.length>=2) return cellsLastFirst===false?parts[0]+' '+parts[1]:parts[1]+' '+parts[0];
+    return parts[0]||'';
+  }
+  parts=line.split(',').map(clean);
+  if(parts.length===2&&parts[0]&&parts[1]&&!/^(jr|sr|ii|iii|iv)\.?$/i.test(parts[1])) return parts[1]+' '+parts[0];
+  return clean(line);
+}
 function nameKey(n){
   n=String(n||'').trim().toLowerCase();
   if(n.indexOf(',')>=0) return n;
@@ -314,7 +329,7 @@ function unpackStreams(o){
 }
 
 var api={pad2:pad2, fmtTime:fmtTime, parseTime:parseTime, median:median, estimateOffset:estimateOffset, align:align,
-  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, csvCell:csvCell, syncRoster:syncRoster, nameKey:nameKey,
+  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, csvCell:csvCell, syncRoster:syncRoster, parseNameLine:parseNameLine, nameKey:nameKey,
   nextPlace:nextPlace, encodeText:encodeText, decodeText:decodeText, makeFrames:makeFrames, parseFrame:parseFrame,
   Assembler:Assembler, packConfig:packConfig, unpackConfig:unpackConfig, packStreams:packStreams, unpackStreams:unpackStreams};
 if(typeof module!=='undefined'&&module.exports) module.exports=api;

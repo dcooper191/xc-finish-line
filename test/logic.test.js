@@ -80,6 +80,15 @@ eq('identical sequences', X.findSeqIssue(line, line.slice()), null);
   r = X.syncRoster(r.runners, 's1', 'g', ['Cy Dunn', 'Dee Fox', 'Ann Lee', 'Ann Lee'], r.counter);
   eq('ids kept, new id for new name, duplicate dropped', r.runners.map(u => u.id+':'+u.n), ['2:Cy Dunn','3:Dee Fox','0:Ann Lee']);
   eq('other groups untouched', X.syncRoster(r.runners, 's1', 'b', ['Ed Go'], r.counter).runners.length, 4); }
+eq('two cells, last then first', X.parseNameLine('Nakamura\tEsme', true), 'Esme Nakamura');
+eq('two cells, first then last', X.parseNameLine('Esme\tNakamura', false), 'Esme Nakamura');
+eq('extra cells ignored, spaces cleaned', X.parseNameLine(' Van Dyke \t Anna \t 11', true), 'Anna Van Dyke');
+eq('one cell with a comma', X.parseNameLine('Nakamura, Esme'), 'Esme Nakamura');
+eq('plain name untouched', X.parseNameLine('  Esme   Nakamura '), 'Esme Nakamura');
+eq('suffix is not a first name', X.parseNameLine('John Smith, Jr.'), 'John Smith, Jr.');
+eq('blank line', X.parseNameLine('\t'), '');
+{ const sorted = ['Esme Nakamura','Iris Ingram','Anna Van Dyke','Bo Abel'].sort((a,b) => X.nameKey(a).localeCompare(X.nameKey(b)));
+  eq('shown first-last, sorted by last', sorted, ['Bo Abel','Anna Van Dyke','Iris Ingram','Esme Nakamura']); }
 eq('next place fills the lowest gap', X.nextPlace({1:1,2:1,4:1}), 3);
 eq('sort key by last name', [X.nameKey('Ann Zed') > X.nameKey('Zoe Abel'), X.nameKey('Lee, Ann')], [true, 'lee, ann']);
 

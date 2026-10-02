@@ -329,7 +329,8 @@ function setupHTML(meet){
     '<button class="btn sm danger" data-act="del-race" data-i="'+i+'" data-confirm="Tap again to remove">Remove</button></div>'; });
   h+='</div><div class="rowf"><button class="btn" data-act="add-race">Add race</button></div></section>';
 
-  h+='<section class="sec"><h2>Schools and rosters</h2><p class="note">Paste each roster one runner per line. Editing a roster keeps the runners already on it.</p><div class="list">';
+  h+='<section class="sec"><h2>Schools and rosters</h2><p class="note">Paste each roster one runner per line, straight from a spreadsheet. Names are shown first name first and sorted by last name. Editing a roster keeps the runners already on it.</p>'+
+     '<label class="field" style="max-width:22rem"><span>When a pasted row has two cells, they are</span><select id="cellorder" data-bind="cell-order"><option value="lf"'+(S.cellOrder!=='fl'?' selected':'')+'>Last name, then first name</option><option value="fl"'+(S.cellOrder==='fl'?' selected':'')+'>First name, then last name</option></select></label><div class="list">';
   c.schools.forEach((s,i) => {
     h+='<div class="item"><span class="swatch" style="background:'+esc(s.color)+'"></span>'+
       '<input class="sname" type="text" id="sc-name-'+i+'" data-bind="school-name" data-i="'+i+'" value="'+esc(s.name)+'" aria-label="School name" placeholder="School name">'+
@@ -881,7 +882,7 @@ function act(name,el){
 }
 function bind(el){
   const meet=curMeet(), d=el.dataset, k=d.bind, i=d.i!=null?+d.i:-1, val=el.value; let r;
-  if(!meet&&k!=='device-name'&&k!=='sound') return;
+  if(!meet&&k!=='device-name'&&k!=='sound'&&k!=='cell-order') return;
   if((k==='school-name'||k==='school-color'||k==='roster')&&!meet.config.schools[i]) return;
   if(k==='race-name'&&!meet.config.races[i]) return;
   if(k==='roster'&&!raceOf(meet,d.race)) return;
@@ -891,12 +892,15 @@ function bind(el){
     case 'meet-date': meet.config.date=val; touchConfig(meet); break;
     case 'device-name': S.deviceName=val.trim().slice(0,30); save(); break;
     case 'sound': S.sound=val==='1'; save(); break;
+    case 'cell-order': S.cellOrder=val==='fl'?'fl':'lf'; save(); break;
     case 'school-name': meet.config.schools[i].name=val.trim(); touchConfig(meet); break;
     case 'school-color': meet.config.schools[i].color=val; touchConfig(meet); pendingRender=true; break;
     case 'race-name': meet.config.races[i].name=val.trim()||('Race '+(i+1)); touchConfig(meet); break;
-    case 'roster': { const out=X.syncRoster(meet.config.runners, meet.config.schools[i].id, d.race, val.split('\n'), meet.config.counter||0);
+    case 'roster': { const lines=val.split(/\r?\n/).map(l => X.parseNameLine(l, S.cellOrder!=='fl'));
+      const out=X.syncRoster(meet.config.runners, meet.config.schools[i].id, d.race, lines, meet.config.counter||0);
       meet.config.runners=out.runners; meet.config.counter=out.counter; touchConfig(meet);
       const sum=el.closest('details').querySelector('summary'), c=meet.config, sid=c.schools[i].id;
+      el.value=c.runners.filter(u => u.s===sid&&u.r===d.race).map(u => u.n).join('\n');   /* show the names as they were understood */
       if(sum) sum.textContent='Rosters ('+c.races.map(rc => rc.name+' '+c.runners.filter(u => u.s===sid&&u.r===rc.id).length).join(', ')+')'; break; }
     case 'res-finishers': r=resultOf(meet,S.ui.resRace,true); r.finishers=val===''?null:Math.max(0,Math.round(+val)||0); touchResult(meet,r); pendingRender=true; break;
     case 'res-adj': r=resultOf(meet,S.ui.resRace,true); r.startAdj=Math.round((parseFloat(val)||0)*1000); touchResult(meet,r); pendingRender=true; break;
