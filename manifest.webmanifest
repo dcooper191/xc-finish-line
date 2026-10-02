@@ -1,0 +1,13 @@
+{
+  "name": "XC Finish Line",
+  "short_name": "XC Finish",
+  "description": "Finish-line timing for cross country meets. Works offline.",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EDF0EA",
+  "theme_color": "#1D5C41",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
