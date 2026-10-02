@@ -13,7 +13,7 @@ No roster, tap or result is ever stored in this repository or sent to a server. 
 
 1. Open the app, go to **Setup**, create the meet, add the schools and paste each roster (one runner per line, per race). Names can arrive as one cell or two, last name first or first name first; a setting above the rosters says which. They are stored and shown first name first and sorted by last name. If a roster was entered the wrong way round, **Swap first and last** fixes it in place.
 2. Press **Copy volunteer link** and text it to the volunteers. The link contains the rosters, so send it only to them. Send it again if you change anything.
-   - A volunteer's phone shows only Timer, Schools and Roster. Setup and Results exist only on the device that created the meet, and on any device you open the **organizer link** on (for example a tablet you collect results with). Keep the organizer link to yourself.
+   - The volunteer link always shows only Timer, Schools and Roster, on any device, including yours. Setup and Results appear on the device that created the meet when the app is opened at its plain address, and on any device you open the **organizer link** on (for example a tablet you collect results with). Keep the organizer link to yourself.
 3. Each volunteer opens the link once while they have a connection and waits for **Works offline** at the top. Adding it to the home screen is optional and gives a full-screen view.
    - Open the link in Safari or Chrome itself, not inside a mail or chat app's built-in browser.
    - Home screen on an iPhone or iPad: add it from the meet link, so the installed app starts with the meet loaded.
@@ -59,7 +59,7 @@ Plain files, no build step.
 | `apps-script/Code.gs` | the Google Sheet side of the automatic upload |
 | `vendor/` | QR generator and QR reader (see licenses there) |
 
-After any change, **bump `VERSION` in `sw.js`**. Phones keep the old copy until they open the app once with a connection after the new version is published.
+After any change, **bump `VERSION` in `sw.js` and `APP_VERSION` in `app.js`** (the same value; it is shown at the bottom of the home screen and Setup). Phones keep the old copy until they open the app once with a connection after the new version is published.
 
 Tests for the logic: `node test/logic.test.js`
 

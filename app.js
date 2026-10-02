@@ -3,6 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
+const APP_VERSION = '2026-10-02.5';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -47,8 +48,12 @@ function adoptStored(str){
 }
 
 function curMeet(){ const m=S.meets[S.meetId]; return (m&&!m.config.deleted)?m:null; }
-/* Organizer view (Setup and Results) or volunteer view (the three jobs only), decided per meet on this device. */
-function isOwner(meet){ return !!(meet&&meet.own); }
+/* Organizer view (Setup and Results) or volunteer view (the three jobs only).
+   The volunteer link ALWAYS gives the volunteer view, on any device, the organizer's included: what the link shows
+   is what volunteers get. The organizer view needs a device that created the meet or opened the organizer link,
+   and a page that was not opened from the volunteer link. */
+function volunteerURL(){ return /#m=/.test(location.hash||''); }
+function isOwner(meet){ return !!(meet&&meet.own)&&!volunteerURL(); }
 function liveMeets(){ return Object.values(S.meets).filter(m => !m.config.deleted)
   .sort((a,b) => (b.config.date||'').localeCompare(a.config.date||'')||(b.config.ver||0)-(a.config.ver||0)); }
 function schoolOf(meet,id){ return meet.config.schools.find(s => s.id===id)||null; }
@@ -399,7 +404,11 @@ function noMeetHTML(){
     '<label class="field"><span>Meet link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste the meet link"></textarea></label>'+
     '<div class="rowf"><button class="btn pri" data-act="import-link">Load meet</button></div></section>'+
     '<section class="sec"><h3>Organizing a meet?</h3><p class="note">Create it here. This device becomes the organizer\'s, with Setup and Results. Volunteers get a link that shows only Timer, Schools and Roster.</p>'+
-    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div></section>';
+    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div></section>'+versionHTML();
+}
+function versionHTML(){
+  return '<section class="sec"><p class="note">Version '+APP_VERSION+'.'+(updateWaiting?' A newer version is ready.':'')+'</p>'+
+    (updateWaiting?'<div class="rowf"><button class="btn" data-act="reload-app">Switch to the newer version</button></div>':'')+'</section>';
 }
 function soundField(){
   return '<label class="field" style="flex:0 1 150px"><span>Tap sound</span><select id="sound" data-bind="sound"><option value="1"'+(S.sound?' selected':'')+'>On</option><option value="0"'+(S.sound?'':' selected')+'>Off</option></select></label>';
@@ -420,7 +429,7 @@ function homeHTML(meet){
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
     '<button class="role c2" data-act="go" data-kind="roster"><b>Roster</b><span>End of the chute. Take each card, tap the school, then the runner\'s name.</span></button>'+
     '</section><section class="sec"><p class="note">'+(syncUrl(meet)?'When you are done, hold Exit. Your taps upload by themselves once the phone has signal, and the top of the screen says Uploaded. With no signal, press Send and show the code to the organizer.'
-      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+(isOwner(meet)?' This is the organizer\'s device: Results and Setup are in the tabs above.':'')+'</p></section>';
+      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+(isOwner(meet)?' This is the organizer\'s device: Results and Setup are in the tabs above.':'')+'</p></section>'+versionHTML();
 }
 
 /* ----- Setup ----- */
@@ -471,7 +480,7 @@ function setupHTML(meet){
   h+='<section class="sec"><h2>Send the meet to volunteers</h2><p class="note">The volunteer link opens the app with only Timer, Schools and Roster: no Setup and no Results. It contains the races, schools and rosters, so treat it like the roster itself. Each volunteer opens it once with a connection. Send it again after any change.</p>'+
      '<div class="rowf"><button class="btn pri" data-act="copy-link">Copy volunteer link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
      '<button class="btn" data-act="show-link-qr">Show as QR code</button></div>'+
-     '<p class="note">For your own other devices, such as a tablet you will collect results on, use the organizer link. It opens the same meet with Setup and Results. Keep it to yourself.</p>'+
+     '<p class="note">Opening the volunteer link shows the volunteer view on any device, yours included, so you can check what they will see. For your own other devices, such as a tablet you will collect results on, use the organizer link. It opens the same meet with Setup and Results. Keep it to yourself.</p>'+
      '<div class="rowf"><button class="btn" data-act="copy-org-link">Copy organizer link</button></div><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
 
   h+='<section class="sec"><h2>This device</h2><div class="rowf">'+deviceNameField()+soundField()+'</div></section>';
@@ -482,7 +491,7 @@ function setupHTML(meet){
      '<li>Nothing is sent during the race. Every tap is saved on the phone the moment it happens.</li>'+
      '<li>Afterward each volunteer presses Send. Open Results on your device, press Scan, and read each code before anyone leaves.</li></ol></section>';
 
-  h+='<section class="sec"><h3>Remove</h3><div class="rowf"><button class="btn danger" data-act="del-meet" data-confirm="Tap again to delete this meet">Delete this meet</button></div></section>';
+  h+='<section class="sec"><h3>Remove</h3><div class="rowf"><button class="btn danger" data-act="del-meet" data-confirm="Tap again to delete this meet">Delete this meet</button></div></section>'+versionHTML();
   return h;
 }
 
@@ -970,6 +979,7 @@ function act(name,el){
         touchStream(meet,st); render();
         if(!meet.config.races.some(rc => { const s2=myStream(meet,rc.id,'timer'); return !!(s2&&s2.startedAt&&!s2.endedAt); })) maybeUpload(true); } break;
     case 'exit-lock': { const k=S.ui.lock?S.ui.lock.kind:'timer'; S.ui.lock=null; S.ui.rosterSchool=null; S.ui.tab=k==='school'?'schools':k; save(); render(); maybeUpload(true); break; }
+    case 'reload-app': location.reload(); break;
     case 'upload-now': if(!meet||!syncUrl(meet)) break;
       if(upBusy) toast('Uploading now'); else if(!uploadPending(meet)) toast(myStreams(meet).some(hasData)?'Everything on this phone is uploaded':'Nothing recorded on this phone yet');
       else if(navigator.onLine===false) toast('No signal. It will upload by itself later, or use Send for the code.');
@@ -1156,14 +1166,22 @@ function boot(){
   const m=LINK_RE.exec(location.hash||'');
   if(m) importCode(m[2], true, m[1]==='o').then(res => { if(res.ok) render(); if(!res.quiet) toast(res.msg); });
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    /* When a newer version has been published, switch to it straight away instead of on the next visit,
+       unless someone is recording or typing; then it waits for the next time the app is opened. */
+    const hadController=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if(!hadController||reloading) return;
+      if(S.ui.lock||ov||typing()){ updateWaiting=true; return; }
+      reloading=true; location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').then(reg => { try{ reg.update(); }catch(e){} }, () => {});
     navigator.serviceWorker.ready.then(() => { offlineReady=true; softHeader(); }).catch(() => {});
   }
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(() => {});
   fetch('apps-script/Code.gs').then(r => r.ok?r.text():'').then(t => { scriptText=t; }, () => {});
   setTimeout(() => maybeUpload(false), 3000);
 }
-let scriptText='';
+let scriptText='', reloading=false, updateWaiting=false;
 window.addEventListener('hashchange', () => { const m=LINK_RE.exec(location.hash||''); if(m) importCode(m[2], false, m[1]==='o').then(res => { toast(res.msg); if(res.ok) render(); }); });
 boot();
 })();
