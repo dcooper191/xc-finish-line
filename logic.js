@@ -170,23 +170,44 @@ function syncRoster(runners, schoolId, raceId, lines, counter){
 }
 /* One pasted roster line -> "First Last". Accepts a plain name, "Last, First", or two spreadsheet cells
    (tab-separated; read as last name then first name unless cellsLastFirst is false). */
-function parseNameLine(line, cellsLastFirst){
+/* A name split into its words and any marks that ride along with it (a captain's ©, an asterisk, "(C)"). */
+function nameTokens(n){
+  var words=[], marks=[];
+  String(n==null?'':n).replace(/\s+/g,' ').trim().split(' ').forEach(function(t){
+    if(!t) return;
+    (/[\p{L}\p{N}]/u.test(t)&&!/^\([A-Za-z]{1,2}\)$/.test(t)?words:marks).push(t);
+  });
+  return {words:words, marks:marks};
+}
+function tidyName(n){ var t=nameTokens(n); return t.words.concat(t.marks).join(' '); }
+/* "Last First" -> "First Last": the final word is the first name, everything before it the last name. Marks stay at the end. */
+function swapNameOrder(n){
+  var t=nameTokens(n), w=t.words;
+  if(w.length<2) return w.concat(t.marks).join(' ');
+  return [w[w.length-1]].concat(w.slice(0,-1)).concat(t.marks).join(' ');
+}
+/* One pasted roster line -> "First Last".
+   Two spreadsheet cells follow lastFirst (default: last name, then first name). "Last, First" is always last name first.
+   A plain name is flipped only when lastFirst is true. */
+function parseNameLine(line, lastFirst){
   function clean(x){ return String(x).replace(/\s+/g,' ').trim(); }
   line=String(line==null?'':line);
   var parts;
   if(line.indexOf('\t')>=0){
     parts=line.split('\t').map(clean).filter(Boolean);
-    if(parts.length>=2) return cellsLastFirst===false?parts[0]+' '+parts[1]:parts[1]+' '+parts[0];
-    return parts[0]||'';
+    if(parts.length>=2) return tidyName(lastFirst===false?parts[0]+' '+parts[1]:parts[1]+' '+parts[0]);
+    return tidyName(parts[0]||'');
   }
   parts=line.split(',').map(clean);
-  if(parts.length===2&&parts[0]&&parts[1]&&!/^(jr|sr|ii|iii|iv)\.?$/i.test(parts[1])) return parts[1]+' '+parts[0];
-  return clean(line);
+  if(parts.length===2&&parts[0]&&parts[1]&&!/^(jr|sr|ii|iii|iv)\.?$/i.test(parts[1])) return tidyName(parts[1]+' '+parts[0]);
+  return lastFirst===true?swapNameOrder(line):tidyName(line);
 }
+/* Sort by last name: everything after the first word, so "Anna Van Dyke" files under V. Marks are ignored. */
 function nameKey(n){
   n=String(n||'').trim().toLowerCase();
   if(n.indexOf(',')>=0) return n;
-  var parts=n.split(' '); return parts[parts.length-1]+' '+n;
+  var w=nameTokens(n).words;
+  return w.length<2?w.join(' '):w.slice(1).join(' ')+' '+w[0];
 }
 /* Lowest place number not used yet. */
 function nextPlace(filled){
@@ -329,7 +350,7 @@ function unpackStreams(o){
 }
 
 var api={pad2:pad2, fmtTime:fmtTime, parseTime:parseTime, median:median, estimateOffset:estimateOffset, align:align,
-  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, csvCell:csvCell, syncRoster:syncRoster, parseNameLine:parseNameLine, nameKey:nameKey,
+  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, csvCell:csvCell, syncRoster:syncRoster, parseNameLine:parseNameLine, swapNameOrder:swapNameOrder, tidyName:tidyName, nameKey:nameKey,
   nextPlace:nextPlace, encodeText:encodeText, decodeText:decodeText, makeFrames:makeFrames, parseFrame:parseFrame,
   Assembler:Assembler, packConfig:packConfig, unpackConfig:unpackConfig, packStreams:packStreams, unpackStreams:unpackStreams};
 if(typeof module!=='undefined'&&module.exports) module.exports=api;

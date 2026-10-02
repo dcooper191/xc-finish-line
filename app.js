@@ -406,6 +406,8 @@ function homeHTML(meet){
 }
 
 /* ----- Setup ----- */
+const openRos={};   /* roster panels the organizer has opened stay open when the page redraws */
+document.addEventListener('toggle', e => { const el=e.target; if(el&&el.classList&&el.classList.contains('roster')) openRos[el.id.slice(4)]=el.open; }, true);
 function setupHTML(meet){
   const meets=liveMeets(); let h='<section class="sec"><h2>Meet</h2>';
   if(!meet){
@@ -424,17 +426,19 @@ function setupHTML(meet){
     '<button class="btn sm danger" data-act="del-race" data-i="'+i+'" data-confirm="Tap again to remove">Remove</button></div>'; });
   h+='</div><div class="rowf"><button class="btn" data-act="add-race">Add race</button></div></section>';
 
-  h+='<section class="sec"><h2>Schools and rosters</h2><p class="note">Paste each roster one runner per line, straight from a spreadsheet. Names are shown first name first and sorted by last name. Editing a roster keeps the runners already on it.</p>'+
-     '<label class="field" style="max-width:22rem"><span>When a pasted row has two cells, they are</span><select id="cellorder" data-bind="cell-order"><option value="lf"'+(S.cellOrder!=='fl'?' selected':'')+'>Last name, then first name</option><option value="fl"'+(S.cellOrder==='fl'?' selected':'')+'>First name, then last name</option></select></label><div class="list">';
+  h+='<section class="sec"><h2>Schools and rosters</h2><p class="note">Paste each roster one runner per line, straight from a spreadsheet. Whatever order the names arrive in, they are stored and shown first name first, and sorted by last name. Editing a roster keeps the runners already on it.</p>'+
+     '<div class="rowf"><label class="field" style="flex:0 1 22rem"><span>The names I paste are written</span><select id="cellorder" data-bind="cell-order"><option value="lf"'+(S.cellOrder!=='fl'?' selected':'')+'>Last name first (Smith Anna)</option><option value="fl"'+(S.cellOrder==='fl'?' selected':'')+'>First name first (Anna Smith)</option></select></label>'+
+     '<button class="btn" data-act="swap-names" data-confirm="Tap again to swap every roster">Swap first and last on every roster</button></div><div class="list">';
   c.schools.forEach((s,i) => {
     h+='<div class="item"><span class="swatch" style="background:'+esc(s.color)+'"></span>'+
       '<input class="sname" type="text" id="sc-name-'+i+'" data-bind="school-name" data-i="'+i+'" value="'+esc(s.name)+'" aria-label="School name" placeholder="School name">'+
       '<select class="colsel" id="sc-color-'+i+'" data-bind="school-color" data-i="'+i+'" aria-label="Color">'+PRESETS.map(p => '<option value="'+p[1]+'"'+(p[1]===s.color?' selected':'')+'>'+p[0]+'</option>').join('')+'</select>'+
       '<button class="btn sm danger" data-act="del-school" data-i="'+i+'" data-confirm="Tap again to remove">Remove</button>';
     const counts=c.races.map(r => c.runners.filter(u => u.s===s.id&&u.r===r.id).length);
-    h+='<details class="roster" id="ros-'+esc(s.id)+'"><summary>Rosters ('+c.races.map((r,k) => esc(r.name)+' '+counts[k]).join(', ')+')</summary><div class="rowf">'+
+    h+='<details class="roster" id="ros-'+esc(s.id)+'"'+(openRos[s.id]?' open':'')+'><summary>Rosters ('+c.races.map((r,k) => esc(r.name)+' '+counts[k]).join(', ')+')</summary><div class="rowf">'+
       c.races.map(r => '<label class="field" style="flex:1 1 200px"><span>'+esc(r.name)+'</span><textarea id="ros-'+esc(s.id)+'-'+esc(r.id)+'" data-bind="roster" data-i="'+i+'" data-race="'+esc(r.id)+'" placeholder="One runner per line">'+
-        esc(c.runners.filter(u => u.s===s.id&&u.r===r.id).map(u => u.n).join('\n'))+'</textarea></label>').join('')+'</div></details></div>';
+        esc(c.runners.filter(u => u.s===s.id&&u.r===r.id).map(u => u.n).join('\n'))+'</textarea></label>').join('')+'</div>'+
+      '<div class="rowf"><button class="btn sm" data-act="swap-names" data-i="'+i+'">Swap first and last for this school</button></div></details></div>';
   });
   h+='</div><div class="rowf"><button class="btn" data-act="add-school">Add school</button></div></section>';
 
@@ -586,19 +590,21 @@ function lockRosterHTML(meet){
   const list=meet.config.runners.filter(u => u.s===school.id&&u.r===race.id)
     .concat(((st&&st.added)||[]).filter(a => a.s===school.id).map(a => ({id:a.id, n:a.n})))
     .sort((a,b) => X.nameKey(a.n).localeCompare(X.nameKey(b.n)));
-  /* every name keeps its position for the whole race; the grid is sized so the team fills the screen */
-  const n=list.length+1, wide=window.innerWidth>=700, avail=Math.max(160, window.innerHeight-120), maxCols=wide?4:3;
-  let cols=(wide&&n>6)?2:1;
-  while(cols<maxCols&&Math.ceil(n/cols)*58>avail) cols++;
-  const scroll=Math.ceil(n/cols)*46>avail, over=placeOverride[race.id];
+  /* Every name keeps its position for the whole race and is always shown in full. A small team fills the screen;
+     a large one gets a second column and scrolls, because there is no rush at this station. */
+  const n=list.length+1, wide=window.innerWidth>=700, avail=Math.max(200, window.innerHeight-110);
+  let cols=1;
+  if(n*66>avail) cols=2;
+  if(wide&&Math.ceil(n/2)*66>avail) cols=3;
+  const over=placeOverride[race.id], flow=Math.ceil(n/cols)*66>avail;   /* too many to fill one screen: rows take their natural height and the list scrolls */
   return '<main class="lock"><div class="lockbar"><button class="btn sm" data-act="roster-back">&lsaquo; Back</button>'+
     '<span class="race">'+esc(school.name)+' &middot; '+esc(race.name)+'</span>'+
     '<button class="btn sm'+(over?' card':'')+'" data-act="place-pad" data-race="'+id+'">'+(over?'Card '+over:'Place '+rosterNext(meet,race.id))+' &middot; edit</button></div>'+
-    '<div class="names'+(scroll?' scrolly':'')+'" style="--cols:'+cols+'">'+
+    '<div class="names scrolly"><div class="namegrid'+(flow?' flow':'')+'" style="--cols:'+cols+'">'+
     list.map(u => placeOf[u.id]
       ?'<button class="nm picked" data-act="unpick" data-race="'+id+'" data-u="'+esc(u.id)+'" data-confirm="Tap again to remove from place '+placeOf[u.id]+'"><i>'+placeOf[u.id]+'</i> '+esc(u.n)+'</button>'
       :'<button class="nm" data-act="pick" data-race="'+id+'" data-u="'+esc(u.id)+'">'+esc(u.n)+'</button>').join('')+
-    '<button class="nm add" data-act="add-runner" data-race="'+id+'" style="'+spanCSS(n,cols)+'">Not on the list</button></div></main>';
+    '<button class="nm add" data-act="add-runner" data-race="'+id+'" style="'+spanCSS(n,cols)+'">Not on the list</button></div></div></main>';
 }
 function rosterPick(meet,raceId,uid,name){
   const st=myStream(meet,raceId,'roster',true), filled=rosterFilled(st);
@@ -926,6 +932,9 @@ function act(name,el){
     case 'add-school': meet.config.schools.push({id:'s'+rid(3), name:'', color:PRESETS[meet.config.schools.length%PRESETS.length][1]}); touchConfig(meet); render();
       { const ns=$('sc-name-'+(meet.config.schools.length-1)); if(ns) ns.focus(); } break;
     case 'del-school': { const gone=meet.config.schools.splice(i,1)[0]; meet.config.runners=meet.config.runners.filter(u => u.s!==gone.id); touchConfig(meet); render(); break; }
+    case 'swap-names': { const only=i>=0?meet.config.schools[i]:null; let k=0;
+      meet.config.runners.forEach(u => { if(only&&u.s!==only.id) return; const v=X.swapNameOrder(u.n); if(v!==u.n){ u.n=v; k++; } });
+      touchConfig(meet); render(); toast('Swapped '+plural(k,'name')+'. Send the meet link again.'); break; }
     case 'add-race': meet.config.races.push({id:'r'+rid(3), name:'Race '+(meet.config.races.length+1)}); touchConfig(meet); render(); break;
     case 'del-race': { const gone=meet.config.races.splice(i,1)[0]; meet.config.runners=meet.config.runners.filter(u => u.r!==gone.id); touchConfig(meet); render(); break; }
     case 'copy-link': withLink(meet, link => copyText(link, 'Meet link copied', 'linkout')); break;
@@ -1025,7 +1034,10 @@ function bind(el){
     case 'school-name': meet.config.schools[i].name=val.trim(); touchConfig(meet); break;
     case 'school-color': meet.config.schools[i].color=val; touchConfig(meet); pendingRender=true; break;
     case 'race-name': meet.config.races[i].name=val.trim()||('Race '+(i+1)); touchConfig(meet); break;
-    case 'roster': { const lines=val.split(/\r?\n/).map(l => X.parseNameLine(l, S.cellOrder!=='fl'));
+    case 'roster': { const sidr=meet.config.schools[i].id, have={};
+      meet.config.runners.forEach(u => { if(u.s===sidr&&u.r===d.race) have[u.n]=1; });
+      /* names already on this roster are left exactly as they are; only new lines are read in the pasted order */
+      const lines=val.split(/\r?\n/).map(l => { const c=l.replace(/\s+/g,' ').trim(); return have[c]?c:X.parseNameLine(l, S.cellOrder!=='fl'); });
       const out=X.syncRoster(meet.config.runners, meet.config.schools[i].id, d.race, lines, meet.config.counter||0);
       meet.config.runners=out.runners; meet.config.counter=out.counter; touchConfig(meet);
       const sum=el.closest('details').querySelector('summary'), c=meet.config, sid=c.schools[i].id;

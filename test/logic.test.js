@@ -84,13 +84,21 @@ eq('two cells, last then first', X.parseNameLine('Nakamura\tEsme', true), 'Esme 
 eq('two cells, first then last', X.parseNameLine('Esme\tNakamura', false), 'Esme Nakamura');
 eq('extra cells ignored, spaces cleaned', X.parseNameLine(' Van Dyke \t Anna \t 11', true), 'Anna Van Dyke');
 eq('one cell with a comma', X.parseNameLine('Nakamura, Esme'), 'Esme Nakamura');
-eq('plain name untouched', X.parseNameLine('  Esme   Nakamura '), 'Esme Nakamura');
+eq('plain name, first name first: untouched', X.parseNameLine('  Esme   Nakamura ', false), 'Esme Nakamura');
+eq('plain name, last name first: flipped', X.parseNameLine('Nakamura Esme', true), 'Esme Nakamura');
+eq('two-word last name, last name first', X.parseNameLine('De Oliveira-Santos Marco', true), 'Marco De Oliveira-Santos');
+eq('captain mark stays at the end', X.parseNameLine('Song Aidan \u00A9', true), 'Aidan Song \u00A9');
+eq('mark inside a cell moves to the end', X.parseNameLine('Song\tAidan (C)', true), 'Aidan Song (C)');
+eq('swap an existing name', X.swapNameOrder('Van Der Berg Pieter *'), 'Pieter Van Der Berg *');
+eq('one-word name is left alone', X.swapNameOrder('Pele'), 'Pele');
 eq('suffix is not a first name', X.parseNameLine('John Smith, Jr.'), 'John Smith, Jr.');
 eq('blank line', X.parseNameLine('\t'), '');
 { const sorted = ['Esme Nakamura','Iris Ingram','Anna Van Dyke','Bo Abel'].sort((a,b) => X.nameKey(a).localeCompare(X.nameKey(b)));
-  eq('shown first-last, sorted by last', sorted, ['Bo Abel','Anna Van Dyke','Iris Ingram','Esme Nakamura']); }
+  eq('shown first-last, sorted by last', sorted, ['Bo Abel','Iris Ingram','Esme Nakamura','Anna Van Dyke']); }
+{ const sorted = ['Aidan Song \u00A9','Marco De Oliveira-Santos','Luis de Ybarra','Bo Abel \u00A9'].sort((a,b) => X.nameKey(a).localeCompare(X.nameKey(b)));
+  eq('marks do not affect the order', sorted, ['Bo Abel \u00A9','Marco De Oliveira-Santos','Luis de Ybarra','Aidan Song \u00A9']); }
 eq('next place fills the lowest gap', X.nextPlace({1:1,2:1,4:1}), 3);
-eq('sort key by last name', [X.nameKey('Ann Zed') > X.nameKey('Zoe Abel'), X.nameKey('Lee, Ann')], [true, 'lee, ann']);
+eq('sort key by last name', [X.nameKey('Ann Zed') > X.nameKey('Zoe Abel'), X.nameKey('Lee, Ann'), X.nameKey('Anna Van Dyke')], [true, 'lee, ann', 'van dyke anna']);
 
 // ---- frames
 { const code = 'z' + 'Ab9_-'.repeat(260); const frames = X.makeFrames(code, 500);
