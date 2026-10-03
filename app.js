@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-10-02.5';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-10-03.1';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -582,7 +582,7 @@ function undoTimer(meet){
   meet.config.races.forEach(r => { const st=myStream(meet,r.id,'timer');
     if(st&&st.startedAt&&st.taps.length&&(!best||st.taps[st.taps.length-1]>best.taps[best.taps.length-1])) best=st; });
   if(!best){ toast('No taps to undo'); return; }
-  best.taps.pop(); touchStream(meet,best); softLock(); toast('Removed '+raceOf(meet,best.raceId).name+' place '+(best.taps.length+1));
+  best.taps.pop(); touchStream(meet,best); softLock(); toast('Removed: '+raceOf(meet,best.raceId).name+' · Place '+(best.taps.length+1));
 }
 
 /* ----- Schools console ----- */
@@ -608,7 +608,7 @@ function lockRosterHTML(meet){
   const race=activeRace(meet,'roster'); if(!race) return noRaceHTML();
   const id=esc(race.id), ci=raceIdx(meet,race.id)%3, school=S.ui.rosterSchool?schoolOf(meet,S.ui.rosterSchool):null;
   if(!school){
-    const list=meet.config.schools, n=list.length, cols=gridCols(n);
+    const list=raceSchools(meet,race.id), n=list.length, cols=gridCols(n);
     return '<main class="lock">'+switchHTML(meet,'roster')+'<div class="frame c'+ci+'"><div class="tiles roster-tiles" style="--cols:'+cols+'">'+
       list.map((s,k) => '<button class="tile" data-act="roster-school" data-s="'+esc(s.id)+'" style="background:'+esc(s.color)+';color:'+inkFor(s.color)+';'+(k===n-1?spanCSS(n,cols):'')+'"><b>'+esc(s.name)+'</b></button>').join('')+
       '</div></div>'+footHTML('<button class="btn" data-act="undo-pick">Undo last name</button>')+'</main>';
@@ -641,9 +641,15 @@ function rosterPick(meet,raceId,uid,name){
   st.picks=st.picks.filter(p => p.p!==place);
   st.picks.push({p:place, u:uid, t:Date.now()}); delete placeOverride[raceId];
   touchStream(meet,st); S.ui.rosterSchool=null; save(); render(); beep(660); buzz();
-  toast(raceOf(meet,raceId).name+' '+place+' · '+name+(was?' (replaced '+was+')':''));
+  toast('Recorded: '+raceOf(meet,raceId).name+' · Place '+place+' · '+name+(was?' (replaced '+was+')':''));
 }
 
+/* The status line shows one thing: the most recent entry, as Race · Place n · detail. */
+function lastHTML(items, empty){
+  if(!items.length) return '<span class="lbl">'+esc(empty)+'</span>';
+  const x=items.reduce((a,b) => b.t>=a.t?b:a);
+  return '<span class="lbl">Last</span>'+esc(x.race)+'<span class="sep">&middot;</span>Place '+x.place+'<span class="sep">&middot;</span>'+esc(x.what);
+}
 function softLock(){
   const lock=S.ui.lock, meet=curMeet(); if(!lock||!meet) return;
   const last=$('last'), items=[];
@@ -654,20 +660,20 @@ function softLock(){
       info(r.id, st.endedAt?'ended &middot; '+st.taps.length:'<span data-clock="'+esc(r.id)+'"></span> &middot; '+st.taps.length);
       const el=document.querySelector('[data-next="'+r.id+'"]'); if(el) el.textContent=st.taps.length+1;
       const lab=document.querySelector('[data-endlabel="'+r.id+'"]'); if(lab) lab.innerHTML=endLabel(r,st);
-      st.taps.forEach((t,i) => items.push({t, txt:r.name+' '+(i+1)+'  '+fmtTime(t-st.startedAt)})); });
-    if(last&&!last.classList.contains('say')) last.textContent=items.length?items.sort((a,b) => a.t-b.t).slice(-3).map(x => x.txt).join('     '):'No times yet. False start? Hold the cancel button.';
+      if(st.taps.length){ const i=st.taps.length-1, t=st.taps[i]; items.push({t, race:r.name, place:i+1, what:fmtTime(t-st.startedAt)}); } });
+    if(last&&!last.classList.contains('say')) last.innerHTML=lastHTML(items,'No times yet. False start? Hold the cancel button.');
     tickClock();
   }else if(lock.kind==='school'){
     meet.config.races.forEach(r => { const st=myStream(meet,r.id,'school'), counts={};
       info(r.id,(st?st.taps.length:0)+' tapped'); if(!st) return;
-      st.taps.forEach((x,i) => { const k=r.id+'|'+(x.s||''); counts[k]=(counts[k]||0)+1;
-        const sc=x.s?schoolOf(meet,x.s):null; items.push({t:x.t, txt:r.name+' '+(i+1)+'  '+(sc?sc.name:'Not sure')}); });
+      st.taps.forEach(x => { const k=r.id+'|'+(x.s||''); counts[k]=(counts[k]||0)+1; });
+      if(st.taps.length){ const i=st.taps.length-1, x=st.taps[i], sc=x.s?schoolOf(meet,x.s):null; items.push({t:x.t, race:r.name, place:i+1, what:sc?sc.name:'Not sure'}); }
       document.querySelectorAll('[data-count^="'+r.id+'|"]').forEach(el2 => { el2.textContent=counts[el2.getAttribute('data-count')]||0; }); });
-    if(last&&!last.classList.contains('say')) last.textContent=items.length?items.sort((a,b) => a.t-b.t).slice(-3).map(x => x.txt).join('     '):'No taps yet';
+    if(last&&!last.classList.contains('say')) last.innerHTML=lastHTML(items,'No taps yet');
   }else{
     meet.config.races.forEach(r => { const st=myStream(meet,r.id,'roster'); info(r.id,'next place '+rosterNext(meet,r.id)); if(!st) return;
-      const rm=runnerMap(meet,r.id); st.picks.forEach(p => items.push({t:p.t||0, txt:r.name+' '+p.p+'  '+((rm[p.u]||{}).n||'?')})); });
-    if(last&&!last.classList.contains('say')) last.textContent=items.length?'Last: '+items.sort((a,b) => a.t-b.t).slice(-2).map(x => x.txt).join('     '):'No names yet';
+      const rm=runnerMap(meet,r.id); st.picks.forEach(p => items.push({t:p.t||0, race:r.name, place:p.p, what:(rm[p.u]||{}).n||'?'})); });
+    if(last&&!last.classList.contains('say')) last.innerHTML=lastHTML(items,'No names yet');
   }
 }
 function tickClock(){
@@ -997,7 +1003,7 @@ function act(name,el){
     case 'undo-school': { let best=null;
       meet.config.races.forEach(rc => { const s2=myStream(meet,rc.id,'school'); if(s2&&s2.taps.length&&(!best||s2.taps[s2.taps.length-1].t>best.taps[best.taps.length-1].t)) best=s2; });
       if(!best){ toast('Nothing to undo'); break; }
-      best.taps.pop(); touchStream(meet,best); softLock(); toast('Removed '+raceOf(meet,best.raceId).name+' place '+(best.taps.length+1)); break; }
+      best.taps.pop(); touchStream(meet,best); softLock(); toast('Removed: '+raceOf(meet,best.raceId).name+' · Place '+(best.taps.length+1)); break; }
 
     case 'roster-school': S.ui.rosterSchool=d.s; save(); render(); break;
     case 'roster-back': S.ui.rosterSchool=null; save(); render(); break;
@@ -1007,7 +1013,7 @@ function act(name,el){
       meet.config.races.forEach(rc => { const s2=myStream(meet,rc.id,'roster'); if(!s2) return; s2.picks.forEach(p => { if(!bp||(p.t||0)>=(bp.t||0)){ bp=p; best=s2; } }); });
       if(!bp){ toast('Nothing to undo'); break; }
       best.picks=best.picks.filter(p => p!==bp); touchStream(meet,best); render();
-      toast('Removed '+raceOf(meet,best.raceId).name+' '+bp.p+' · '+((runnerMap(meet,best.raceId)[bp.u]||{}).n||'')); break; }
+      toast('Removed: '+raceOf(meet,best.raceId).name+' · Place '+bp.p+' · '+((runnerMap(meet,best.raceId)[bp.u]||{}).n||'')); break; }
     case 'place-pad': ov={type:'numpad', race:raceId, val:''}; renderOverlay(); break;
     case 'key': if(d.k==='ok'){ const nv=+ov.val;
         if(nv>0){ const f=rosterFilled(myStream(meet,ov.race,'roster'));

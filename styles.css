@@ -128,8 +128,10 @@ ol.steps{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:6px
 .pad-clock{font-family:var(--display);font-weight:700;font-size:clamp(1.8rem,8vmin,3.4rem);font-variant-numeric:tabular-nums;line-height:1.1}
 .pad-num{font-family:var(--display);font-weight:800;font-size:clamp(7rem,42vmin,18rem);line-height:.95;font-variant-numeric:tabular-nums}
 .lockfoot{display:flex;flex-direction:column;gap:6px}
-.last{font-variant-numeric:tabular-nums;font-weight:600;min-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.last{font-variant-numeric:tabular-nums;font-weight:600;font-size:1.05rem;min-height:1.5em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .last.say{color:var(--brand);font-weight:700}
+.last .lbl{color:var(--muted);font-weight:600;margin-right:10px}
+.last .sep{color:var(--muted);margin:0 8px}
 .footrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
 .hold{position:relative;overflow:hidden;touch-action:none}
 .hold::before{content:"";position:absolute;inset:0 100% 0 0;background:var(--bad-bg);transition:none}
