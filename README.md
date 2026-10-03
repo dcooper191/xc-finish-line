@@ -45,6 +45,7 @@ Results can then **Send results to the Sheet**, which writes each race to its ow
 - Times and school taps are matched by time of day, after the constant offset between the two devices is estimated and removed. A missed or extra tap shows up as a place where the two lists stop matching.
 - School taps and roster entries are matched by school sequence. The roster's school is used for the result; disagreements are listed.
 - Place cards stay the authority on finish order. Enter the number handed out to compare counts.
+- Rostered runners with no place are listed and exported as DNS (or DNF if marked), but only once a race has at least one name recorded. A race run with Timer and Schools only exports Place, School and Time with no DNS rows.
 
 ## Changing the app
 

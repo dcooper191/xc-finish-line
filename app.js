@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-10-03.1';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-10-03.2';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -121,7 +121,8 @@ function view(meet,raceId){
   Object.keys(seen).forEach(k => { if(seen[k].length>1) seen[k].forEach(i => { rows[i].dup=true; }); });
   const unplaced=meet.config.runners.filter(u => u.r===raceId&&!seen[u.id])
     .sort((a,b) => raceIdxSchool(meet,a.s)-raceIdxSchool(meet,b.s)||X.nameKey(a.n).localeCompare(X.nameKey(b.n)));
-  return {r, T, C, R, times:cols.times, schools:cols.schools, rows, n, edited:!!r.cols, stale:!!r.cols&&r.cols.sig!==sig, sig, adj:r.startAdj||0, unplaced, rm};
+  return {r, T, C, R, times:cols.times, schools:cols.schools, rows, n, edited:!!r.cols, stale:!!r.cols&&r.cols.sig!==sig, sig, adj:r.startAdj||0, unplaced, rm,
+    named:rows.some(x => x.entry)};   /* with no names recorded, runners without a place are not counted as DNS */
 }
 function raceIdxSchool(meet,sid){ const i=meet.config.schools.findIndex(s => s.id===sid); return i<0?999:i; }
 function ensureCols(meet,raceId){
@@ -133,7 +134,7 @@ function exportRows(meet,raceId){
   const v=view(meet,raceId), out=[];
   v.rows.forEach(row => { const sch=row.school?schoolOf(meet,row.school):null;
     out.push([row.i+1, sch?sch.name:'', row.name, row.time!=null?fmtTime(row.time+v.adj):'']); });
-  v.unplaced.forEach(u => { const sch=schoolOf(meet,u.s); out.push(['', sch?sch.name:'', u.n, (v.r.status||{})[u.id]||'DNS']); });
+  if(v.named) v.unplaced.forEach(u => { const sch=schoolOf(meet,u.s); out.push(['', sch?sch.name:'', u.n, (v.r.status||{})[u.id]||'DNS']); });
   return out;
 }
 function toDelimited(meet,raceIds,sep){
@@ -753,7 +754,7 @@ function resultsHTML(meet){
   });
   h+='</div></section>';
 
-  if(v.unplaced.length){
+  if(v.unplaced.length&&v.named){
     h+='<section class="sec"><h2>Did not finish or start</h2><p class="note">On the roster with no place. Each is exported as DNS unless you mark DNF.</p><div class="list">'+
       v.unplaced.map(u => { const s=schoolOf(meet,u.s), st=(v.r.status||{})[u.id]||'DNS';
         return '<div class="item"><div class="grow"><strong>'+esc(u.n)+'</strong><div class="status">'+esc(s?s.name:'')+'</div></div><div class="picks">'+
