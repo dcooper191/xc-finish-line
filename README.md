@@ -5,7 +5,8 @@ Finish-line timing for cross country meets, built for three volunteers with phon
 - **Timer** (at the line): START for each race, then one tap per finisher. Two races can run at once; a switch at the top chooses which race the big button belongs to.
 - **Schools** (at the line): one tap per finisher on that runner's school, in finish order.
 - **Roster** (end of the chute): take the place card, tap the school, tap the name. The place follows the cards in order; enter the card number when someone arrives out of order.
-- **Results** (organizer): scan each volunteer's code, review the merged list, fix what the cross-checks flag, mark DNS/DNF, and copy the table into a Google Sheet.
+- **Live** (organizer): the finish list and team scores as the phones upload them, for showing coaches at the race.
+- **Results** (organizer): review the merged list, fix what the cross-checks flag, mark DNS/DNF, and send the table to the Google Sheet.
 
 No roster, tap or result is ever stored in this repository or sent to a server. GitHub only delivers the app's code.
 
@@ -13,21 +14,27 @@ No roster, tap or result is ever stored in this repository or sent to a server. 
 
 1. Open the app, go to **Setup**, create the meet, add the schools and paste each roster (one runner per line, per race). Names can arrive as one cell or two, last name first or first name first; a setting above the rosters says which. They are stored and shown first name first and sorted by last name. If a roster was entered the wrong way round, **Swap first and last** fixes it in place.
 2. Press **Copy volunteer link** and text it to the volunteers. The link contains the rosters, so send it only to them. Send it again if you change anything.
-   - The volunteer link always shows only Timer, Schools and Roster, on any device, including yours. Setup and Results appear on the device that created the meet when the app is opened at its plain address, and on any device you open the **organizer link** on (for example a tablet you collect results with). Keep the organizer link to yourself.
+   - The volunteer link always shows only Timer, Schools and Roster, on any device, including yours. Live, Results and Setup appear on the device that created the meet when the app is opened at its plain address, on any device you open the **organizer link** on, and on any device that opens the meet from the Sheet. Every link carries the meet's code (shown in the header), so copies of a meet can be told apart.
 3. Each volunteer opens the link once while they have a connection and waits for **Works offline** at the top. Adding it to the home screen is optional and gives a full-screen view.
    - Open the link in Safari or Chrome itself, not inside a mail or chat app's built-in browser.
    - Home screen on an iPhone or iPad: add it from the meet link, so the installed app starts with the meet loaded.
 
 ## Race day
 
-1. Nothing is sent during the race. Every tap is saved on the phone the moment it happens.
+1. Every tap is saved on the phone the moment it happens. With the Sheet connected it also uploads in the background every 20 seconds or so.
 2. Keep the phone awake and the app in front. Guided Access (iOS) or app pinning (Android) stops stray swipes.
-3. After the race each volunteer holds **Exit**, presses **Send**, and shows the code. On your device open **Results**, press **Scan a code**, and read each one. The Collected table shows what you have, so nobody leaves with data still on their phone.
+3. After the race, Results on your device lists each phone and when it last uploaded, so nobody leaves with data still on their phone. Without the Sheet, each volunteer holds **Exit**, presses **Send**, and shows the code; you press **Scan a code** in Results.
 4. If a camera will not cooperate, **Copy as text** on the volunteer's phone and **Paste a code** on yours does the same job.
 
-## Automatic upload to a Google Sheet (optional)
+## Google Sheet (optional, strongly recommended)
 
-With this set up, nobody has to hand anything over. Taps are still saved on the phone first, and nothing is sent while someone is recording. A phone uploads its lists when it is quiet (the volunteer holds Exit, the last race on the Timer is ended, or two minutes pass with no taps) and has signal. Results on your device checks the Sheet every 20 seconds and pulls in whatever has arrived. The QR codes remain as the backup for a phone with no signal.
+With a Sheet connected, nobody has to hand anything over and you can watch the race come in:
+
+- Each phone uploads its tap lists about every 20 seconds while it has signal. Taps are always saved on the phone first; the upload runs in the background and never holds up a tap. The line under the buttons says what is on the phone and when the Sheet last got it.
+- **Live** on the organizer's device shows each race's finish list (Place, Time, School, and Name once the Roster station is used) and team scores so far, refreshed every 20 seconds.
+- Each meet's setup is saved on the Sheet as you edit it. Any device with the Sheet's link can list the meets on it and open one as organizer (home screen, "Meets on the Sheet"), so a lost link or a browser that cleared its storage is not a problem. Phones that already have the meet pick up roster changes by themselves.
+- Results warns when phones are uploading to a different copy of the meet than the one open, and can switch to it.
+- The QR codes remain as the backup for a phone with no signal.
 
 One-time setup, on a computer:
 
@@ -35,9 +42,11 @@ One-time setup, on a computer:
 2. In the app's **Setup**, press **Copy the script** (or open `apps-script/Code.gs` here), paste it over everything in the editor, and save.
 3. **Deploy > New deployment**, type **Web app**, Execute as **Me**, Who has access **Anyone**. Deploy and approve the permission request. If "Anyone" is not offered, the Google account's organization blocks it; use a personal Google account for the Sheet.
 4. Copy the web app link (it ends in `/exec`), paste it into **Setup**, and press **Test the connection**.
-5. Send the meet link to volunteers again. The link carries this setting.
+5. Send the meet link to volunteers. The link carries this setting.
 
-Results can then **Send results to the Sheet**, which writes each race to its own tab. The `XC uploads` tab holds the raw lists from each phone and can be left alone. If the script is ever changed, publish it with **Deploy > Manage deployments > Edit > New version** so the link stays the same.
+When the script changes (the app says "older script"), paste the new one over the old and publish it with **Deploy > Manage deployments > Edit > Version: New version > Deploy**. The link stays the same.
+
+Results can **Send results to the Sheet**, which writes each race to its own tab. The `XC uploads` tab holds the raw lists from each phone and each meet's setup, and can be left alone.
 
 ## How the lists are checked
 
