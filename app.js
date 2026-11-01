@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.9';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.10';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -597,17 +597,15 @@ function deviceNameField(){
 }
 function homeHTML(meet){
   const isToday=todayId()===meet.config.id, owner=isOwner(meet);
-  return '<section class="sec"><h2>'+esc(meet.config.name)+(isToday?' <span class="badge">Today\'s meet</span>':'')+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date))+'. ':'')+
-    (owner&&sheetUrl()&&!isToday&&todayId()?'This is not the meet marked as today\'s; volunteers\' phones are on the other one. ':'')+
-    (owner?'Results, Review and Setup are in the tabs above. Results is the clean list to show runners and coaches; Review is where you check the lists and fix anything. The jobs below are the volunteers\' screens.':'This device is set up for the meet and needs no signal from here on. Pick your job.')+'</p>'+(owner?'':meetPickerHTML(meet))+
+  return '<section class="sec"><h2>'+esc(meet.config.name)+(isToday?' <span class="badge">Today\'s meet</span>':'')+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date)):'')+
+    (owner&&sheetUrl()&&!isToday&&todayId()?' · Not today\'s meet; volunteers\' phones are on the other one.':'')+'</p>'+(owner?'':meetPickerHTML(meet))+
     (owner&&sheetUrl()&&!isToday?'<div class="rowf"><button class="btn pri" data-act="set-today" data-m="'+esc(meet.config.id)+'" data-confirm="Tap again: today\'s meet">Make this today\'s meet</button></div>':'')+
     (owner?'':'<div class="rowf">'+deviceNameField()+soundField()+'</div>')+'</section>'+
     (owner?sheetMeetsHTML(meet)+'<section class="sec"><div class="rowf">'+deviceNameField()+soundField()+'</div></section>':'')+
     '<section class="roles">'+
     '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses. Switch races at the top.</span></button>'+
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
-    '</section><section class="sec"><p class="note">'+(syncUrl(meet)?'When you are done, hold Exit. Your taps upload by themselves once the phone has signal, and the top of the screen says Uploaded. With no signal, press Send and show the code to the organizer.'
-      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+'</p></section>'+versionHTML();
+    '</section>'+versionHTML();
 }
 /* Team scores, either as one meet (everyone's raw place) or as duals (every pair head to head). */
 function chipHTML(meet,sid){ const s=schoolOf(meet,sid); return s?'<span class="chip"><u style="background:'+esc(s.color)+'"></u><span>'+esc(s.name)+'</span></span>':esc(sid); }
@@ -616,7 +614,7 @@ function scoresHTML(meet, v, heading){
   const note=blanks?' '+plural(blanks,'finisher')+' with no school yet, so these can still change.':'';
   if(meet.config.scoring==='dual'){
     const d=X.dualScores(schools); if(!d.pairs.length) return '';
-    return '<section class="sec"><h3>'+heading+'</h3><p class="note">Dual meet: each pair of teams scored head to head with the other teams removed. Top five score, a team needs five finishers.'+note+'</p>'+
+    return '<section class="sec"><h3>'+heading+'</h3>'+(note?'<p class="note">'+note.trim()+'</p>':'')+
       '<div class="tscroll"><table class="grid"><thead><tr><th>Record</th><th>School</th><th>Finishers</th></tr></thead><tbody>'+
       d.records.map(r => '<tr><td class="num">'+r.w+'-'+r.l+(r.t?'-'+r.t:'')+'</td><td>'+chipHTML(meet,r.s)+'</td><td>'+r.finishers+(r.finishers<5?' (fewer than five)':'')+'</td></tr>').join('')+'</tbody></table></div>'+
       '<div class="tscroll"><table class="grid"><thead><tr><th>Score</th><th></th><th>Score</th><th></th></tr></thead><tbody>'+
@@ -625,7 +623,7 @@ function scoresHTML(meet, v, heading){
       '</tbody></table></div></section>';
   }
   const sc=X.teamScores(schools); if(!sc.length) return '';
-  return '<section class="sec"><h3>'+heading+'</h3><p class="note">Scored as one meet: top five score, sixth and seventh displace, a team needs five finishers.'+note+'</p>'+
+  return '<section class="sec"><h3>'+heading+'</h3>'+(note?'<p class="note">'+note.trim()+'</p>':'')+
     '<div class="tscroll"><table class="grid"><thead><tr><th>Score</th><th>School</th><th>Scoring places</th><th>Finishers</th></tr></thead><tbody>'+
     sc.map(x => '<tr><td class="num">'+(x.score==null?'inc.':x.score)+'</td><td>'+chipHTML(meet,x.s)+'</td><td>'+(x.score==null?'fewer than five':x.places.slice(0,5).join(', ')+(x.places.length>5?' ('+x.places.slice(5).join(', ')+')':''))+'</td><td>'+x.finishers+'</td></tr>').join('')+
     '</tbody></table></div></section>';
@@ -693,7 +691,7 @@ function liveHTML(meet){
   let h='<section class="sec"><div class="rowf" style="justify-content:space-between;align-items:center"><h2>'+esc(race.name)+'</h2>'+
     (su?'<button class="btn sm" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check now</button>':'')+'</div>'+
     (races.length>1?'<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="live-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>':'')+
-    '<p class="note pullnote">'+esc(su?pullNote()+' Phones push every tap while they have signal.':'No Sheet connected: this shows what has been scanned or recorded on this device.')+'</p></section>';
+    (su?'<p class="note pullnote">'+esc(pullNote())+'</p>':'')+'</section>';
   if(!v.n) return h+'<div class="empty"><p>No finishers yet for '+esc(race.name)+'.</p></div>';
   h+='<div class="rtable live'+(named?' named':'')+'"><div class="rhead"><span>Pl</span><span>Time</span><span>School</span>'+(named?'<span>Name</span>':'')+'</div>';
   v.rows.forEach(row => { const sch=row.school?schoolOf(meet,row.school):null;
@@ -716,18 +714,18 @@ function setupHTML(meet){
   }
   const c=meet.config;
   h+=meetPickerHTML(meet);
-  h+='<p class="note">Meet code <strong>'+esc(c.id)+'</strong>. It is in every link for this meet and on the Sheet, so you can tell copies apart.</p>'+
+  h+='<p class="note">Meet code <strong>'+esc(c.id)+'</strong></p>'+
      '<div class="rowf"><label class="field" style="flex:2 1 200px"><span>Meet name</span><input type="text" id="meetname" data-bind="meet-name" value="'+esc(c.name)+'"></label>'+
      '<label class="field" style="flex:1 1 150px"><span>Date</span><input type="date" id="meetdate" data-bind="meet-date" value="'+esc(c.date||'')+'"></label>'+
      '<label class="field" style="flex:1 1 200px"><span>Scoring</span><select id="scoring" data-bind="scoring"><option value="invite"'+(c.scoring==='dual'?'':' selected')+'>Invitational (raw places)</option><option value="dual"'+(c.scoring==='dual'?' selected':'')+'>Dual meet (head to head)</option></select></label></div>'+
      '<div class="rowf"><button class="btn" data-act="new-meet">New meet (copies schools and rosters)</button></div></section>';
 
-  h+='<section class="sec"><h2>Races</h2><p class="note">Each race has its own start, its own places and its own rosters. Two can run at once.</p><div class="list">';
+  h+='<section class="sec"><h2>Races</h2><div class="list">';
   c.races.forEach((r,i) => { h+='<div class="item"><input class="grow" type="text" id="race-name-'+i+'" data-bind="race-name" data-i="'+i+'" value="'+esc(r.name)+'" aria-label="Race name">'+
     '<button class="btn sm danger" data-act="del-race" data-i="'+i+'" data-confirm="Tap again to remove">Remove</button></div>'; });
   h+='</div><div class="rowf"><button class="btn" data-act="add-race">Add race</button></div></section>';
 
-  h+='<section class="sec"><h2>Schools and rosters</h2><p class="note">Paste each roster one runner per line, straight from a spreadsheet. Whatever order the names arrive in, they are stored and shown first name first, and sorted by last name. Editing a roster keeps the runners already on it.</p>'+
+  h+='<section class="sec"><h2>Schools and rosters</h2>'+
      '<div class="rowf"><label class="field" style="flex:0 1 22rem"><span>The names I paste are written</span><select id="cellorder" data-bind="cell-order"><option value="lf"'+(S.cellOrder!=='fl'?' selected':'')+'>Last name first (Smith Anna)</option><option value="fl"'+(S.cellOrder==='fl'?' selected':'')+'>First name first (Anna Smith)</option></select></label>'+
      '<button class="btn" data-act="swap-names" data-confirm="Tap again to swap every roster">Swap first and last on every roster</button></div><div class="list">';
   c.schools.forEach((s,i) => {
@@ -745,24 +743,24 @@ function setupHTML(meet){
   h+='</div><div class="rowf"><button class="btn" data-act="add-school">Add school</button></div></section>';
 
   const su=syncUrl(meet), raw=String(c.sync||'').trim();
-  h+='<section class="sec"><h2>Google Sheet</h2><p class="note">Optional, and set up once for the season. With it, each phone pushes every tap while it has signal, Results on your device fills in during the race, and this meet\'s setup is kept on the Sheet so any device of yours can open it.</p>'+
-     '<ol class="steps"><li>Make a Google Sheet. In it, open Extensions, then Apps Script.</li><li>Press Copy the script here, and paste it over everything in the editor. Save.</li>'+
-     '<li>Deploy, New deployment, type Web app. Execute as: Me. Who has access: Anyone. Deploy, and approve the permission request.</li>'+
-     '<li>Copy the web app link (it ends in /exec) and paste it below. Then send the meet link to volunteers; it carries this setting.</li></ol>'+
-     '<div class="rowf"><button class="btn" data-act="copy-script">Copy the script</button></div><textarea id="scriptout" class="linkbox" readonly hidden></textarea>'+
+  h+='<section class="sec"><h2>Google Sheet</h2>'+
+     '<details class="roster"><summary>Setting up the Sheet (once a season)</summary><ol class="steps"><li>Make a Google Sheet. In it, open Extensions, then Apps Script.</li><li>Press Copy the script here, and paste it over everything in the editor. Save.</li>'+
+     '<li>Deploy, New deployment, type Web app. Execute as: Me. Who has access: Anyone. Deploy, and approve the permission request. When the script changes later: Deploy, Manage deployments, Edit, New version.</li>'+
+     '<li>Copy the web app link (it ends in /exec) and paste it below.</li></ol>'+
+     '<div class="rowf"><button class="btn" data-act="copy-script">Copy the script</button></div><textarea id="scriptout" class="linkbox" readonly hidden></textarea></details>'+
      '<label class="field"><span>Web app link</span><input type="text" id="syncurl" data-bind="sync-url" value="'+esc(raw)+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
      (raw&&!su?'<div class="banner warn"><strong>That is not a web app link.</strong>It should start with https://script.google.com/ and end in /exec.</div>':'')+
      '<div class="rowf"><button class="btn'+(su?' pri':'')+'" data-act="sync-test">Test the connection</button></div>'+(su?'<p class="status" id="setupnote">'+esc(setupNote(meet))+'</p>':'')+'</section>';
   const isToday=todayId()===c.id;
-  h+='<section class="sec"><h2>Today\'s meet</h2>'+(su?'<p class="note">'+(isToday?'This is today\'s meet. Volunteers\' phones open it by themselves.':'Volunteers\' phones open whichever meet is marked as today\'s. '+(todayId()?'Right now that is another meet.':'None is marked yet.'))+'</p>'+
+  h+='<section class="sec"><h2>Today\'s meet</h2>'+(su?'<p class="note">'+(isToday?'This is today\'s meet.':todayId()?'Another meet is marked as today\'s.':'No meet is marked as today\'s yet.')+'</p>'+
      (isToday?'':'<div class="rowf"><button class="btn pri" data-act="set-today" data-m="'+esc(c.id)+'" data-confirm="Tap again: today\'s meet">Make this today\'s meet</button></div>')
-     :'<p class="note">Connect a Sheet above and volunteers follow today\'s meet with one season link. Without it, each meet needs its own link, below.</p>')+'</section>';
-  h+='<section class="sec"><h2>Links</h2>'+(su?'<p class="note">One <strong>season link</strong> for volunteers, sent once. It connects their phone to the Sheet and opens today\'s meet, with only Timer, Schools and Roster. The plain address of the app is always this full view; a phone or tablet of yours that has never opened the app can be connected to the Sheet with the second link.</p>'+
+     :'<p class="note">Needs the Sheet.</p>')+'</section>';
+  h+='<section class="sec"><h2>Links</h2>'+(su?''+
      '<div class="rowf"><button class="btn pri" data-act="copy-season">Copy season link for volunteers</button>'+(navigator.share?'<button class="btn" data-act="share-season">Share</button>':'')+'<button class="btn" data-act="show-season-qr">Show as QR code</button></div>'+
      '<div class="rowf"><button class="btn" data-act="copy-season-org">Copy link for your own other devices</button></div>'+
-     '<p class="note"><strong>Results link</strong>: a read-only finish list for runners, coaches and parents. Print the QR code and post it at the course.</p>'+
+     '<p class="note"><strong>Results link</strong></p>'+
      '<div class="rowf"><button class="btn" data-act="copy-results-link">Copy results link</button><button class="btn" data-act="show-results-qr">Show as QR code</button></div>':'')+
-     '<details class="roster"><summary>'+(su?'Backup: links for this meet only (no signal needed)':'Links for this meet')+'</summary><p class="note">A meet link carries this meet\'s setup inside it, so a phone with no signal can still load the meet. The volunteer link shows only Timer, Schools and Roster; the organizer link adds Results, Review and Setup. Send it again after any change.</p>'+
+     '<details class="roster"><summary>'+(su?'Backup: links for this meet only (no signal needed)':'Links for this meet')+'</summary>'+
      '<div class="rowf"><button class="btn" data-act="copy-link">Copy volunteer meet link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
      '<button class="btn" data-act="show-link-qr">Show as QR code</button><button class="btn" data-act="copy-org-link">Copy organizer meet link</button></div></details><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
 
@@ -774,7 +772,7 @@ function setupHTML(meet){
      '<li>Every tap is saved on the phone the moment it happens. With the Sheet connected, phones upload in the background and Results on your device shows the finish list as it grows.</li>'+
      '<li>Afterward, check Review and send the finished races to the Sheet. Without the Sheet, each volunteer presses Send and you scan the codes before anyone leaves.</li></ol></section>';
 
-  h+='<section class="sec"><h3>Remove</h3><p class="note">'+(su?'Removes the meet from the Sheet (setup, uploads and result tabs) and from this device. Today\'s meet cannot be deleted; mark another first.':'Removes the meet from this device.')+'</p><div class="rowf"><button class="btn danger" data-act="del-meet" data-confirm="Tap again to delete this meet"'+(isToday?' disabled':'')+'>Delete this meet</button></div></section>'+versionHTML();
+  h+='<section class="sec"><h3>Remove</h3>'+(isToday?'<p class="note">Today\'s meet cannot be deleted; mark another first.</p>':'')+'<div class="rowf"><button class="btn danger" data-act="del-meet" data-confirm="Tap again to delete this meet"'+(isToday?' disabled':'')+'>Delete this meet</button></div></section>'+versionHTML();
   return h;
 }
 
@@ -785,7 +783,7 @@ function timerStatus(st){
   return ['', 'Ended, '+st.taps.length+' recorded'];
 }
 function timerHTML(meet){
-  let h='<section class="sec"><h2>Timer</h2><p class="note">One screen times every race. The switch at the top chooses which race the big button belongs to: START first, then one tap per finisher. All clocks keep running whichever race is showing.</p>'+
+  let h='<section class="sec"><h2>Timer</h2>'+
     '<div class="rowf"><button class="btn pri" data-act="go" data-kind="timer">Open the timer</button></div><div class="list">';
   meet.config.races.forEach(r => {
     const st=myStream(meet,r.id,'timer'), s=timerStatus(st);
@@ -798,7 +796,7 @@ function timerHTML(meet){
 }
 function schoolsHTML(meet){
   if(!meet.config.schools.length) return '<div class="empty"><p>'+(isOwner(meet)?'Add the schools in Setup first. Each one becomes a button here.':'This meet has no schools yet. Ask the organizer for an updated link.')+'</p></div>';
-  let h='<section class="sec"><h2>School taps</h2><p class="note">Tap the school of each runner as they cross the line, in order. The switch at the top chooses the race.</p>'+
+  let h='<section class="sec"><h2>School taps</h2>'+
     '<div class="rowf"><button class="btn pri" data-act="go" data-kind="school">Open the school buttons</button></div><div class="list">';
   meet.config.races.forEach(r => {
     const st=myStream(meet,r.id,'school'), n=entryCount(st);
@@ -814,7 +812,7 @@ function rosterHTML(meet){
   const race=raceOf(meet,rid), v=view(meet,rid), placeOf={};
   v.rows.forEach(row => { if(row.runner&&!row.runner.unknown) placeOf[row.runner.id]=row; });
   const runners=meet.config.runners.filter(u => u.r===rid), placed=runners.filter(u => placeOf[u.id]).length;
-  let h='<section class="sec"><h2>Roster</h2><p class="note">After the race: enter each runner\'s place from the cards the coaches hand in. The time fills in from the Timer; &#10003; means the school tapped at the line at that place is the runner\'s, &ne; means it was another school. Runners left blank are exported as DNS unless marked DNF.</p>'+
+  let h='<section class="sec"><h2>Roster</h2>'+
     (races.length>1?'<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="res-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>':'')+
     '<p class="status">'+esc(race.name)+': '+placed+' of '+runners.length+' placed, '+v.n+' finishers timed.</p></section>';
   if(!runners.length) return h+'<div class="empty"><p>No roster for '+esc(race.name)+' yet. Paste the rosters in Setup, or add names in Review.</p></div>';
@@ -1007,8 +1005,7 @@ function resultsHTML(meet){
   if(!races.length) return '<div class="empty"><p>Add a race in Setup first.</p></div>';
   let rid=S.ui.resRace; if(!races.some(r => r.id===rid)){ rid=races[0].id; S.ui.resRace=rid; }
   const su=syncUrl(meet);
-  let h='<section class="sec"><h2>Collected</h2><p class="note">Meet code '+esc(meet.config.id)+'. '+(su?'Phones push every tap to the Sheet while they have signal, and this screen checks it every 5 seconds. For a phone with no signal, scan its code.'
-      :'Scan each volunteer\'s code after the race. Lists recorded on this device are already here.')+'</p>'+checklistHTML(meet)+
+  let h='<section class="sec"><h2>Collected</h2><p class="note">Meet code '+esc(meet.config.id)+'</p>'+checklistHTML(meet)+
     (su?'<p class="status pullnote">'+esc(pullNote())+'</p>'+phonesHTML(meet)+'<div id="others">'+otherMeetsHTML(meet)+'</div>':'')+
     '<div class="rowf">'+(su?'<button class="btn pri" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check the Sheet now</button>':'')+
     '<button class="btn'+(su?'':' pri')+'" data-act="scan">Scan a code</button><button class="btn" data-act="paste-open">Paste a code</button></div></section>';
@@ -1062,7 +1059,7 @@ function resultsHTML(meet){
   h+='</div></section>';
 
   if(v.unplaced.length&&v.named){
-    h+='<section class="sec"><h2>Did not finish or start</h2><p class="note">On the roster with no place. Each is exported as DNS unless you mark DNF.</p><div class="list">'+
+    h+='<section class="sec"><h2>Did not finish or start</h2><div class="list">'+
       v.unplaced.map(u => { const s=schoolOf(meet,u.s), st=(v.r.status||{})[u.id]||'DNS';
         return '<div class="item"><div class="grow"><strong>'+esc(u.n)+'</strong><div class="status">'+esc(s?s.name:'')+'</div></div><div class="picks">'+
           ['DNS','DNF'].map(k => '<button aria-pressed="'+(st===k)+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+k+'">'+k+'</button>').join('')+'</div></div>'; }).join('')+'</div></section>';
@@ -1070,7 +1067,7 @@ function resultsHTML(meet){
 
   h+=scoresHTML(meet, v, 'Team scores');
 
-  h+='<section class="sec"><h2>Export</h2><p class="note">The results sheet is one page with every race: Place, Team, Last Name, First Name, Time, and the team scores laid out as score boxes. Save it, share it, or print it to PDF.'+(su?' Sending puts every race on its own tab of your Sheet.':'')+'</p><div class="rowf">'+
+  h+='<section class="sec"><h2>Export</h2><div class="rowf">'+
      '<button class="btn pri" data-act="open-sheet">Results sheet</button>'+
      (su?'<button class="btn" data-act="send-results"'+(sheetBusy?' disabled':'')+'>'+(sheetBusy?'Sending':'Send results to the Sheet')+'</button>':'')+
      '<button class="btn" data-act="copy-tsv">Copy '+esc(race.name)+'</button>'+(races.length>1?'<button class="btn" data-act="copy-all">Copy all races</button>':'')+
