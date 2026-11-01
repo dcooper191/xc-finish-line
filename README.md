@@ -4,9 +4,9 @@ Finish-line timing for cross country meets, built for three volunteers with phon
 
 - **Timer** (at the line): START for each race, then one tap per finisher. Two races can run at once; a switch at the top chooses which race the big button belongs to.
 - **Schools** (at the line): one tap per finisher on that runner's school, in finish order.
-- **Roster** (end of the chute): take the place card, tap the school, tap the name. The place follows the cards in order; enter the card number when someone arrives out of order.
-- **Results** (organizer): the finish list and team scores as the phones upload them, for showing runners and coaches at the race.
-- **Review** (organizer): check the merged lists, fix what the cross-checks flag, mark DNS/DNF, and send the table to the Google Sheet.
+- **Roster** (organizer, after the race): place cards go out at the chute as usual and coaches write the places on their rosters; you type each runner's place into the Roster tab. The time fills in from the Timer and the school tapped at that place is checked against the runner's school.
+- **Results** (organizer): the finish list and team scores as the phones upload them. The same list is available to anyone through the **results link** (Setup, print its QR code and post it at the course): a read-only page that refreshes itself.
+- **Review** (organizer): check the merged lists, fix what the cross-checks flag, mark DNS/DNF, send the table to the Google Sheet, and export the **results sheet**: one page with every race (Place, Team, Last Name, First Name, Time) and the team scores as score boxes, to save, share or print to PDF.
 
 No roster, tap or result is ever stored in this repository or sent to a server. GitHub only delivers the app's code.
 
@@ -14,7 +14,7 @@ No roster, tap or result is ever stored in this repository or sent to a server. 
 
 Connect a Google Sheet once (below). After that:
 
-1. **Set up each meet in the app's Setup** (schools, rosters if you want names, races). Every change is saved to the Sheet by itself.
+1. **Set up each meet in the app's Setup** (schools, which races each school runs, rosters if you want names, scoring). Every change is saved to the Sheet by itself.
 2. Press **Make this today's meet**. That is the whole hand-off.
 3. Volunteers open the **season link** once, in September. Every race day they open the app with signal and it shows today's meet, with only Timer, Schools and Roster. No new links, ever.
 4. The plain address of the app is always the full view: today's meet with Results, Review and Setup, and a home screen that lists every meet on the Sheet: open another one, mark one as today's, or delete one (which removes its setup, uploads and result tabs from the Sheet). A device of yours that has never opened the app needs the Sheet connected once: paste the web app link, or open the "link for your own other devices" from Setup.

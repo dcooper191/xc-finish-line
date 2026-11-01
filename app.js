@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.4';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.5';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -52,8 +52,9 @@ function curMeet(){ const m=S.meets[S.meetId]; return (m&&!m.config.deleted)?m:n
    A volunteer link (#s= season link or #m= meet link) ALWAYS gives the stripped-down volunteer view, the three
    jobs only, on any device: what the link shows is what volunteers get. Nothing has to be set up on a device. */
 function volunteerURL(){ return /#[ms]=/.test(location.hash||''); }
+function boardURL(){ return /#r=/.test(location.hash||''); }   /* the results board: a read-only finish list for anyone at the course */
 function todayId(){ return (listInfo&&!listInfo.err&&listInfo.today)||''; }
-function isOwner(meet){ return !!meet&&!volunteerURL(); }
+function isOwner(meet){ return !!meet&&!volunteerURL()&&!boardURL(); }
 function liveMeets(){ return Object.values(S.meets).filter(m => !m.config.deleted)
   .sort((a,b) => (b.config.date||'').localeCompare(a.config.date||'')||(b.config.ver||0)-(a.config.ver||0)); }
 function schoolOf(meet,id){ return meet.config.schools.find(s => s.id===id)||null; }
@@ -130,15 +131,16 @@ function ensureCols(meet,raceId){
   if(!r.cols){ const v=view(meet,raceId), raw=rawCols(v.T,v.C); r.cols={times:raw.times, schools:raw.schools, sig:v.sig}; }
   return r;
 }
+const EXPORT_HEAD=['Place','Team','Last Name','First Name','Time'];
 function exportRows(meet,raceId){
   const v=view(meet,raceId), out=[];
-  v.rows.forEach(row => { const sch=row.school?schoolOf(meet,row.school):null;
-    out.push([row.i+1, sch?sch.name:'', row.name, row.time!=null?fmtTime(row.time+v.adj):'']); });
-  if(v.named) v.unplaced.forEach(u => { const sch=schoolOf(meet,u.s); out.push(['', sch?sch.name:'', u.n, (v.r.status||{})[u.id]||'DNS']); });
+  v.rows.forEach(row => { const sch=row.school?schoolOf(meet,row.school):null, nm=X.splitName(row.name||'');
+    out.push([row.i+1, sch?sch.name:'', nm.last, nm.first, row.time!=null?fmtTime(row.time+v.adj):'']); });
+  if(v.named) v.unplaced.forEach(u => { const sch=schoolOf(meet,u.s), nm=X.splitName(u.n); out.push([(v.r.status||{})[u.id]||'DNS', sch?sch.name:'', nm.last, nm.first, '']); });
   return out;
 }
 function toDelimited(meet,raceIds,sep){
-  const many=raceIds.length>1, rows=[(many?['Race']:[]).concat(['Place','School','Name','Time'])];
+  const many=raceIds.length>1, rows=[(many?['Race']:[]).concat(EXPORT_HEAD)];
   raceIds.forEach(id => { const race=raceOf(meet,id); exportRows(meet,id).forEach(r => rows.push(many?[race.name].concat(r):r)); });
   return rows.map(r => r.map(c => sep===','?X.csvCell(c):String(c).replace(/[\t\n]/g,' ')).join(sep)).join('\n');
 }
@@ -146,7 +148,7 @@ function toDelimited(meet,raceIds,sep){
 /* ---------- moving data between devices ---------- */
 /* Season links carry the Sheet: #s= for volunteers, #a= for the organizer's own devices. The Sheet then says which
    meet is today's. The older per-meet links (#m= volunteer, #o= organizer) still work as a no-signal backup. */
-const LINK_RE=/#([moas])=([A-Za-z0-9_.~-]+)/;
+const LINK_RE=/#([moasr])=([A-Za-z0-9_.~-]+)/;
 function meetLinkFor(code, owner){ return location.href.split('#')[0]+(owner?'#o=':'#m=')+code; }
 function sheetKey(url){
   const m=/^https:\/\/script\.google\.com\/(?:a\/macros\/([^\/\s]+)\/|)macros\/s\/([A-Za-z0-9_-]+)\/exec$/.exec(url||''); if(!m) return '';
@@ -157,6 +159,7 @@ function urlFromKey(key){
   return 'https://script.google.com/'+(m[1]?'a/macros/'+m[1]+'/':'')+'macros/s/'+m[2]+'/exec';
 }
 function seasonLink(owner){ const k=sheetKey(sheetUrl()); return k?location.href.split('#')[0]+(owner?'#a=':'#s=')+k:''; }
+function resultsLink(){ const k=sheetKey(sheetUrl()); return k?location.href.split('#')[0]+'#r='+k:''; }
 /* Any link from this app: a season link connects the device to the Sheet and follows today's meet; a meet link loads that meet. */
 function importLink(kind, code, boot){
   if(kind==='m'||kind==='o') return importCode(code, boot, kind==='o');
@@ -327,7 +330,7 @@ function followToday(force, announce){
     if(li.err) return {ok:!!meet, quiet:!announce, msg:li.err==='oldscript'?'The Sheet runs an older script. Update it from Setup.':'Could not reach the Sheet: '+li.err};
     const today=li.today, m=today&&li.meets.find(x => x.meet===today);
     if(!m||!m.setup) return {ok:!!meet, quiet:!announce, msg:'No meet is marked as today\'s on the Sheet yet.'+(meet?' Staying on '+meet.config.name+'.':'')};
-    const own=!volunteerURL(), cur=curMeet();
+    const own=!volunteerURL()&&!boardURL(), cur=curMeet();
     if(cur&&cur.config.id!==today&&S.ui.lock) return {ok:true, quiet:!announce, msg:'Today\'s meet is '+m.name+'. Exit the current job and it will switch.'};
     if(cur&&cur.config.id!==today&&own&&S.chosen&&S.chosen.meet===cur.config.id&&S.chosen.today===today) return {ok:true, quiet:true, msg:''};   /* organizer picked this one on purpose */
     const before=cur?cur.config.id+':'+cur.config.ver:'';
@@ -433,7 +436,7 @@ function pullSheet(manual){
   }).catch(e => { pullInfo={at:Date.now(), n:0, err:String((e&&e.message)||e), phones:(pullInfo&&pullInfo.phones)||[]}; }).then(() => {
     pullBusy=false;
     const m=S.meets[id], changed=!m||streamsSig(m)!==before||hadErr!==!!pullInfo.err;
-    if((S.ui.tab==='results'||S.ui.tab==='live')&&!S.ui.lock&&!ov&&(manual||changed)){ if(typing()) deferRender(); else render(); }
+    if((S.ui.tab==='results'||S.ui.tab==='live'||S.ui.tab==='roster')&&!S.ui.lock&&!ov&&(manual||changed)){ if(typing()) deferRender(); else render(); }
     else{ document.querySelectorAll('.pullnote').forEach(el => { el.textContent=pullNote(); }); }
   }).then(() => listSheet(!!manual)).then(() => { const el=$('others'); if(el) el.innerHTML=otherMeetsHTML(curMeet()); });
 }
@@ -449,7 +452,7 @@ function pullNote(){
 }
 function sendResults(meet){
   const url=syncUrl(meet); if(!url||sheetBusy) return;
-  const tabs=meet.config.races.map(r => ({title:meet.config.name+' '+r.name, rows:[['Place','School','Name','Time']].concat(exportRows(meet,r.id))})).filter(t => t.rows.length>1);
+  const tabs=meet.config.races.map(r => ({title:meet.config.name+' '+r.name, rows:[EXPORT_HEAD].concat(exportRows(meet,r.id))})).filter(t => t.rows.length>1);
   if(!tabs.length){ toast('There are no results to send yet'); return; }
   sheetBusy=true; sheetMsg=null; render();
   postSheet(url, {t:'results', tabs}).then(res => {
@@ -459,7 +462,7 @@ function sendResults(meet){
     .then(() => { sheetBusy=false; if(typing()) deferRender(); else render(); });
 }
 setInterval(() => { maybeUpload(false); pushSetup(); followTick(false); }, 10000);
-setInterval(() => { if((S.ui.tab==='results'||S.ui.tab==='live')&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 5000);
+setInterval(() => { if((S.ui.tab==='results'||S.ui.tab==='live'||S.ui.tab==='roster')&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 5000);
 window.addEventListener('online', () => { softHeader(); softSync(); maybeUpload(false); pushSetup(); followTick(true); });
 window.addEventListener('offline', () => softHeader());
 
@@ -505,8 +508,8 @@ function copyText(text, okMsg, fallbackId){
   const fb=() => { const ta=fallbackId&&$(fallbackId); if(ta){ ta.hidden=false; ta.value=text; ta.focus(); ta.select(); toast('Copy the selected text'); } else toast('Copying is blocked in this browser'); };
   try{ navigator.clipboard.writeText(text).then(() => toast(okMsg), fb); }catch(e){ fb(); }
 }
-function download(name, text){
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download=name;
+function download(name, text, type){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:type||'text/csv'})); a.download=name;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
 function shareFail(e){ if(!e||e.name!=='AbortError') toast('Sharing was blocked. Try again, or use Copy.'); }
@@ -539,8 +542,14 @@ function render(noGuard){
     softLock(); wake(true); return;
   }
   wake(false);
+  if(boardURL()){
+    S.ui.tab='live'; app.className='app board';
+    app.innerHTML='<header class="top"><div class="brand"><strong>'+esc(meet?meet.config.name:'XC Finish Line')+'</strong><span>'+esc(meet?(meet.config.date?niceDate(meet.config.date)+' · ':'')+'Results':'Results')+'</span></div></header>'+
+      '<main id="main" class="main"><div class="wrap">'+(meet?liveHTML(meet):'<div class="empty"><p>'+(sheetUrl()?'No meet is marked as today\'s yet. This page updates by itself once one is.':'This results link is not complete.')+'</p></div>')+'</div></main>';
+    return;
+  }
   const keep=$('main'), top=keep?keep.scrollTop:0, s=statusPill();
-  const tabs=!meet?[]:[['timer','Timer'],['schools','Schools'],['roster','Roster']].concat(isOwner(meet)?[['live','Results'],['results','Review'],['setup','Setup']]:[]);
+  const tabs=!meet?[]:[['timer','Timer'],['schools','Schools']].concat(isOwner(meet)?[['roster','Roster'],['live','Results'],['results','Review'],['setup','Setup']]:[]);
   app.className='app';
   app.innerHTML='<header class="top"><button class="brand" data-act="tab" data-tab="home"><strong>XC Finish Line</strong><span>'+esc(meet?meet.config.name:'No meet on this device')+(meet?' <i class="code">'+esc(meet.config.id)+'</i>':'')+'</span></button>'+
     '<button class="pill" id="pill" data-act="upload-now"><span class="dot '+s[0]+'"></span>'+esc(s[1])+'</button>'+
@@ -553,7 +562,7 @@ function mainHTML(meet){
   const warn=storageOK?'':'<div class="banner bad"><strong>This browser is not saving data on the device.</strong>Taps will be lost if the page reloads. Turn off private browsing before the race.</div>';
   if(!meet) return warn+noMeetHTML();
   let tab=S.ui.tab;
-  if(!isOwner(meet)&&(tab==='setup'||tab==='results'||tab==='live')) tab='home';   /* volunteers have the three jobs only */
+  if(!isOwner(meet)&&(tab==='setup'||tab==='results'||tab==='live'||tab==='roster')) tab='home';   /* volunteers have the two line jobs only */
   if(tab==='setup'){ refreshLink(); return warn+setupHTML(meet); }
   if(tab==='live') return warn+liveHTML(meet);
   if(tab==='timer') return warn+timerHTML(meet);
@@ -597,7 +606,6 @@ function homeHTML(meet){
     '<section class="roles">'+
     '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses. Switch races at the top.</span></button>'+
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
-    '<button class="role c2" data-act="go" data-kind="roster"><b>Roster</b><span>End of the chute. Take each card, tap the school, then the runner\'s name.</span></button>'+
     '</section><section class="sec"><p class="note">'+(syncUrl(meet)?'When you are done, hold Exit. Your taps upload by themselves once the phone has signal, and the top of the screen says Uploaded. With no signal, press Send and show the code to the organizer.'
       :'When your race is over, hold Exit, press Send and show the code to the organizer.')+'</p></section>'+versionHTML();
 }
@@ -622,11 +630,48 @@ function scoresHTML(meet, v, heading){
     sc.map(x => '<tr><td class="num">'+(x.score==null?'inc.':x.score)+'</td><td>'+chipHTML(meet,x.s)+'</td><td>'+(x.score==null?'fewer than five':x.places.slice(0,5).join(', ')+(x.places.length>5?' ('+x.places.slice(5).join(', ')+')':''))+'</td><td>'+x.finishers+'</td></tr>').join('')+
     '</tbody></table></div></section>';
 }
+/* ----- the results sheet: one self-contained page to save, share or print, laid out like a score sheet ----- */
+function sheetDoc(meet){
+  const c=meet.config, title=c.name;
+  const css='body{font-family:Helvetica,Arial,sans-serif;color:#111;margin:24px;font-size:14px}h1{font-size:22px;margin:0 0 2px}h2{font-size:17px;margin:28px 0 8px;page-break-after:avoid}.sub{color:#555;margin:0 0 18px}'+
+    'table{border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{border:1px solid #888;padding:4px 8px;text-align:left}th{background:#E9EDE8;font-size:12px;text-transform:uppercase;letter-spacing:.04em}'+
+    '.race{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}.res td:first-child,.res th:first-child{text-align:center}.res td:last-child{text-align:right;font-weight:600}'+
+    '.boxes{display:grid;grid-template-columns:repeat(2,max-content);gap:14px 22px}.box{border-collapse:collapse}.box th{font-size:12px;text-transform:none;letter-spacing:0}.box td{text-align:center;min-width:3.2em}.box td.disp{background:#E6E6E6}.box tr.sum td{font-weight:700;background:#F3F3F3}.win{font-weight:700}'+
+    '.scores{min-width:260px}.dns td{color:#555}@media print{body{margin:12mm}h2{margin-top:18px}}@page{margin:12mm}';
+  let body='<h1>Cross Country Score Sheet</h1><p class="sub">'+esc(title)+(c.date?' · '+esc(niceDate(c.date)):'')+'</p>';
+  c.races.forEach(race => {
+    const v=view(meet,race.id); if(!v.n) return;
+    const rows=exportRows(meet,race.id);
+    body+='<h2>'+esc(race.name)+'</h2><div class="race"><table class="res"><thead><tr>'+EXPORT_HEAD.map(hh => '<th>'+esc(hh)+'</th>').join('')+'</tr></thead><tbody>'+
+      rows.map(r => '<tr'+(/^DN/.test(String(r[0]))?' class="dns"':'')+'>'+r.map(x => '<td>'+esc(x)+'</td>').join('')+'</tr>').join('')+'</tbody></table><div class="scores">';
+    const schools=v.rows.map(r => r.school);
+    if(c.scoring==='dual'){
+      const d=X.dualScores(schools);
+      body+='<table><thead><tr><th>Record</th><th>Team</th></tr></thead><tbody>'+d.records.map(r => '<tr><td>'+r.w+'-'+r.l+(r.t?'-'+r.t:'')+'</td><td>'+esc((schoolOf(meet,r.s)||{}).name||r.s)+(r.finishers<5?' (incomplete)':'')+'</td></tr>').join('')+'</tbody></table><br><div class="boxes">'+
+        d.pairs.map(p => { const na=(schoolOf(meet,p.a)||{}).name||p.a, nb=(schoolOf(meet,p.b)||{}).name||p.b, n=Math.max(7, p.pa.length, p.pb.length, 7);
+          let t='<table class="box"><tr><th class="'+(p.winner===p.a?'win':'')+'">'+esc(na)+'</th><th class="'+(p.winner===p.b?'win':'')+'">'+esc(nb)+'</th></tr>';
+          for(let i=0;i<7;i++) t+='<tr><td'+(i>=5?' class="disp"':'')+'>'+(p.pa[i]||'')+'</td><td'+(i>=5?' class="disp"':'')+'>'+(p.pb[i]||'')+'</td></tr>';
+          return t+'<tr class="sum"><td>'+(p.sa==null?'-':p.sa)+'</td><td>'+(p.sb==null?'-':p.sb)+'</td></tr></table>'; }).join('')+'</div>';
+    }else{
+      const sc=X.teamScores(schools);
+      if(sc.length) body+='<table><thead><tr><th>Score</th><th>Team</th><th>Scoring places</th></tr></thead><tbody>'+sc.map(x => '<tr><td>'+(x.score==null?'inc.':x.score)+'</td><td>'+esc((schoolOf(meet,x.s)||{}).name||x.s)+'</td><td>'+(x.score==null?'fewer than five':x.places.slice(0,5).join(', ')+(x.places.length>5?' ('+x.places.slice(5).join(', ')+')':''))+'</td></tr>').join('')+'</tbody></table>';
+    }
+    body+='</div></div>';
+  });
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' results</title><style>'+css+'</style></head><body>'+body+'</body></html>';
+}
+function saveFile(fname, text, type){
+  let file=null; try{ file=new File([text],fname,{type}); }catch(e){}
+  const touch=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
+  if(touch&&file&&navigator.canShare&&navigator.canShare({files:[file]})) navigator.share({files:[file], title:fname}).catch(e => { if(!e||e.name!=='AbortError') download(fname,text,type); });
+  else download(fname,text,type);
+}
 /* ----- Live: the finish list as it stands, for showing coaches at the race ----- */
 function liveHTML(meet){
   const races=meet.config.races, su=syncUrl(meet);
   if(!races.length) return '<div class="empty"><p>Add a race in Setup first.</p></div>';
-  let rid=S.ui.liveRace; if(!races.some(r => r.id===rid)){ rid=races[0].id; S.ui.liveRace=rid; }
+  /* until someone picks a race, show the one with the most finishers (the race that is on) */
+  let rid=S.ui.liveRace; if(!S.ui.livePicked||!races.some(r => r.id===rid)){ rid=races.map(r => [view(meet,r.id).n, r.id]).sort((a,b) => b[0]-a[0])[0][1]; S.ui.liveRace=rid; }
   const race=raceOf(meet,rid), v=view(meet,rid), named=v.rows.some(r => r.name);
   let h='<section class="sec"><div class="rowf" style="justify-content:space-between;align-items:center"><h2>'+esc(race.name)+'</h2>'+
     (su?'<button class="btn sm" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check now</button>':'')+'</div>'+
@@ -674,7 +719,8 @@ function setupHTML(meet){
       '<select class="colsel" id="sc-color-'+i+'" data-bind="school-color" data-i="'+i+'" aria-label="Color">'+PRESETS.map(p => '<option value="'+p[1]+'"'+(p[1]===s.color?' selected':'')+'>'+p[0]+'</option>').join('')+'</select>'+
       '<button class="btn sm danger" data-act="del-school" data-i="'+i+'" data-confirm="Tap again to remove">Remove</button>';
     const counts=c.races.map(r => c.runners.filter(u => u.s===s.id&&u.r===r.id).length);
-    h+='<details class="roster" id="ros-'+esc(s.id)+'"'+(openRos[s.id]?' open':'')+'><summary>Rosters ('+c.races.map((r,k) => esc(r.name)+' '+counts[k]).join(', ')+')</summary><div class="rowf">'+
+    h+='<div class="runs"><span>Runs in</span>'+c.races.map(r => '<label><input type="checkbox" data-bind="school-race" data-i="'+i+'" data-race="'+esc(r.id)+'"'+(schoolInRace(s,r.id)?' checked':'')+'> '+esc(r.name)+'</label>').join('')+'</div>'+
+      '<details class="roster" id="ros-'+esc(s.id)+'"'+(openRos[s.id]?' open':'')+'><summary>Rosters ('+c.races.map((r,k) => esc(r.name)+' '+counts[k]).join(', ')+')</summary><div class="rowf">'+
       c.races.map(r => '<label class="field" style="flex:1 1 200px"><span>'+esc(r.name)+'</span><textarea id="ros-'+esc(s.id)+'-'+esc(r.id)+'" data-bind="roster" data-i="'+i+'" data-race="'+esc(r.id)+'" placeholder="One runner per line">'+
         esc(c.runners.filter(u => u.s===s.id&&u.r===r.id).map(u => u.n).join('\n'))+'</textarea></label>').join('')+'</div>'+
       '<div class="rowf"><button class="btn sm" data-act="swap-names" data-i="'+i+'">Swap first and last for this school</button></div></details></div>';
@@ -696,7 +742,9 @@ function setupHTML(meet){
      :'<p class="note">Connect a Sheet above and volunteers follow today\'s meet with one season link. Without it, each meet needs its own link, below.</p>')+'</section>';
   h+='<section class="sec"><h2>Links</h2>'+(su?'<p class="note">One <strong>season link</strong> for volunteers, sent once. It connects their phone to the Sheet and opens today\'s meet, with only Timer, Schools and Roster. The plain address of the app is always this full view; a phone or tablet of yours that has never opened the app can be connected to the Sheet with the second link.</p>'+
      '<div class="rowf"><button class="btn pri" data-act="copy-season">Copy season link for volunteers</button>'+(navigator.share?'<button class="btn" data-act="share-season">Share</button>':'')+'<button class="btn" data-act="show-season-qr">Show as QR code</button></div>'+
-     '<div class="rowf"><button class="btn" data-act="copy-season-org">Copy link for your own other devices</button></div>':'')+
+     '<div class="rowf"><button class="btn" data-act="copy-season-org">Copy link for your own other devices</button></div>'+
+     '<p class="note"><strong>Results link</strong>: a read-only finish list for runners, coaches and parents. Print the QR code and post it at the course.</p>'+
+     '<div class="rowf"><button class="btn" data-act="copy-results-link">Copy results link</button><button class="btn" data-act="show-results-qr">Show as QR code</button></div>':'')+
      '<details class="roster"><summary>'+(su?'Backup: links for this meet only (no signal needed)':'Links for this meet')+'</summary><p class="note">A meet link carries this meet\'s setup inside it, so a phone with no signal can still load the meet. The volunteer link shows only Timer, Schools and Roster; the organizer link adds Results, Review and Setup. Send it again after any change.</p>'+
      '<div class="rowf"><button class="btn" data-act="copy-link">Copy volunteer meet link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
      '<button class="btn" data-act="show-link-qr">Show as QR code</button><button class="btn" data-act="copy-org-link">Copy organizer meet link</button></div></details><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
@@ -705,7 +753,7 @@ function setupHTML(meet){
 
   h+='<section class="sec"><h2>Race day</h2><ol class="steps">'+
      '<li>Before leaving a connection, every volunteer opens the season link (once a season) and then opens the app on race day with signal, and waits for "Works offline" at the top. It shows today\'s meet.</li>'+
-     '<li>Timer and Schools stand at the line. Roster stands at the end of the chute and still collects the place cards.</li>'+
+     '<li>Timer and Schools stand at the line. Place cards go out at the chute as usual; coaches write places on their rosters and you enter them in the Roster tab afterward.</li>'+
      '<li>Every tap is saved on the phone the moment it happens. With the Sheet connected, phones upload in the background and Results on your device shows the finish list as it grows.</li>'+
      '<li>Afterward, check Review and send the finished races to the Sheet. Without the Sheet, each volunteer presses Send and you scan the codes before anyone leaves.</li></ol></section>';
 
@@ -743,15 +791,37 @@ function schoolsHTML(meet){
   return h+'</div></section>';
 }
 function rosterHTML(meet){
-  if(!meet.config.schools.length) return '<div class="empty"><p>'+(isOwner(meet)?'Add the schools and rosters in Setup first.':'This meet has no schools yet. Ask the organizer for an updated link.')+'</p></div>';
-  let h='<section class="sec"><h2>Roster</h2><p class="note">At the end of the chute: take the card, tap the school, tap the name. The switch at the top chooses the race. The place follows the cards in order, and you can enter a card number when someone arrives out of order.</p>'+
-    '<div class="rowf"><button class="btn pri" data-act="go" data-kind="roster">Open the roster</button></div><div class="list">';
-  meet.config.races.forEach(r => {
-    const st=myStream(meet,r.id,'roster'), n=entryCount(st);
-    h+='<div class="item"><div class="grow"><strong>'+esc(r.name)+'</strong><div class="status">'+(n?n+' recorded':'None recorded yet')+'</div></div>'+
-      (n?'<button class="btn sm danger" data-act="reset-stream" data-kind="roster" data-race="'+esc(r.id)+'" data-confirm="Tap again to erase these names">Reset</button>':'')+'</div>';
+  const races=meet.config.races;
+  if(!meet.config.schools.length||!races.length) return '<div class="empty"><p>Add the schools, races and rosters in Setup first.</p></div>';
+  let rid=S.ui.resRace; if(!races.some(r => r.id===rid)){ rid=races[0].id; S.ui.resRace=rid; }
+  const race=raceOf(meet,rid), v=view(meet,rid), placeOf={};
+  v.rows.forEach(row => { if(row.runner&&!row.runner.unknown) placeOf[row.runner.id]=row; });
+  const runners=meet.config.runners.filter(u => u.r===rid), placed=runners.filter(u => placeOf[u.id]).length;
+  let h='<section class="sec"><h2>Roster</h2><p class="note">After the race: enter each runner\'s place from the cards the coaches hand in. The time fills in from the Timer, and the school tapped at the line at that place is checked against the runner\'s. Runners left blank are exported as DNS unless marked DNF.</p>'+
+    (races.length>1?'<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="res-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>':'')+
+    '<p class="status">'+esc(race.name)+': '+placed+' of '+runners.length+' placed, '+v.n+' finishers timed.</p></section>';
+  if(!runners.length) return h+'<div class="empty"><p>No roster for '+esc(race.name)+' yet. Paste the rosters in Setup, or add names in Review.</p></div>';
+  meet.config.schools.filter(s2 => runners.some(u => u.s===s2.id)).forEach(sch => {
+    const list=runners.filter(u => u.s===sch.id).sort((x,y) => X.nameKey(x.n).localeCompare(X.nameKey(y.n)));
+    h+='<section class="sec"><h3>'+chipHTML(meet,sch.id)+'</h3><div class="ptable">';
+    list.forEach(u => { const row=placeOf[u.id], st=(v.r.status||{})[u.id]||'';
+      let fb='';
+      if(row){ fb=(row.time!=null?'<b>'+fmtTime(row.time+v.adj)+'</b>':'<span class="none">no time at this place</span>')+(row.tapS?(row.tapS===u.s?' <span class="okword">school matches</span>':' <span class="warnline">tapped as '+esc((schoolOf(meet,row.tapS)||{}).name||'?')+'</span>'):'');
+        if(row.dup) fb+=' <span class="warnline">place used twice</span>'; }
+      h+='<div class="prow"><span class="pname">'+esc(u.n)+'</span><input type="number" inputmode="numeric" min="1" class="pbox" data-bind="place" data-u="'+esc(u.id)+'" value="'+(row?row.i+1:'')+'" placeholder="#" aria-label="Place">'+
+        '<span class="pfb">'+fb+'</span><button class="pdnf'+(st==='DNF'?' on':'')+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+(st==='DNF'?'DNS':'DNF')+'"'+(row?' hidden':'')+'>DNF</button></div>'; });
+    h+='</div></section>';
   });
-  return h+'</div></section>';
+  return h;
+}
+function setPlace(meet, uid, place){
+  const r=resultOf(meet,S.ui.resRace,true), names=r.names;
+  Object.keys(names).forEach(k => { if(names[k]&&names[k].u===uid) delete names[k]; });
+  /* a chute pick for this runner (old data) is cleared the same way */
+  const v=view(meet,S.ui.resRace); v.rows.forEach(row => { if(row.entry&&row.entry.u===uid&&!names[row.i+1]) names[row.i+1]={clear:1}; });
+  if(place>0){ const was=names[place]&&names[place].u&&names[place].u!==uid?(runnerMap(meet,S.ui.resRace)[names[place].u]||{}).n:null;
+    names[place]={u:uid}; if(was) toast('Place '+place+' was '+was+'; replaced'); }
+  touchResult(meet,r);
 }
 
 /* ----- race-day consoles: one race on screen at a time, chosen with the switch at the top ----- */
@@ -804,9 +874,10 @@ function undoTimer(meet){
 }
 
 /* ----- Schools console ----- */
+function schoolInRace(s,raceId){ return !Array.isArray(s.races)||s.races.indexOf(raceId)>=0; }
 function raceSchools(meet,raceId){
   const withRunners=meet.config.schools.filter(s => meet.config.runners.some(u => u.s===s.id&&u.r===raceId));
-  return withRunners.length?withRunners:meet.config.schools;
+  return withRunners.length?withRunners:meet.config.schools.filter(s => schoolInRace(s,raceId));
 }
 function lockSchoolHTML(meet){
   const race=activeRace(meet,'school'); if(!race) return noRaceHTML();
@@ -981,9 +1052,10 @@ function resultsHTML(meet){
 
   h+=scoresHTML(meet, v, 'Team scores');
 
-  h+='<section class="sec"><h2>Export</h2><p class="note">Columns are Place, School, Name, Time.'+(su?' Sending puts every race on its own tab of your Sheet.':' Copy, then paste into cell A1 of a Google Sheet.')+'</p><div class="rowf">'+
-     (su?'<button class="btn pri" data-act="send-results"'+(sheetBusy?' disabled':'')+'>'+(sheetBusy?'Sending':'Send results to the Sheet')+'</button>':'')+
-     '<button class="btn'+(su?'':' pri')+'" data-act="copy-tsv">Copy '+esc(race.name)+'</button>'+(races.length>1?'<button class="btn" data-act="copy-all">Copy all races</button>':'')+
+  h+='<section class="sec"><h2>Export</h2><p class="note">The results sheet is one page with every race: Place, Team, Last Name, First Name, Time, and the team scores laid out as score boxes. Save it, share it, or print it to PDF.'+(su?' Sending puts every race on its own tab of your Sheet.':'')+'</p><div class="rowf">'+
+     '<button class="btn pri" data-act="open-sheet">Results sheet</button>'+
+     (su?'<button class="btn" data-act="send-results"'+(sheetBusy?' disabled':'')+'>'+(sheetBusy?'Sending':'Send results to the Sheet')+'</button>':'')+
+     '<button class="btn" data-act="copy-tsv">Copy '+esc(race.name)+'</button>'+(races.length>1?'<button class="btn" data-act="copy-all">Copy all races</button>':'')+
      '<button class="btn" data-act="dl-csv">Download CSV</button></div>'+
      (sheetMsg?'<div class="banner '+sheetMsg.kind+'"><strong>'+esc(sheetMsg.text)+'</strong>'+(sheetMsg.link?'<a href="'+esc(sheetMsg.link)+'" target="_blank" rel="noopener">Open the Sheet</a>':'')+'</div>':'')+
      '<textarea id="outtext" class="out" readonly hidden></textarea></section>';
@@ -1041,7 +1113,10 @@ function renderOverlay(){
         '<div class="rowf"><button class="btn" data-act="copy-send">Copy as text instead</button>'+(navigator.share?'<button class="btn" data-act="share-send">Share as text</button>':'')+'</div><textarea id="sendout" class="linkbox" readonly hidden></textarea>'
         :'<p class="note">Preparing the code.</p>'));
   }else if(ov.type==='linkqr'){
-    h=sheet(ov.season?'Season link':'Meet link', '<div class="qrbox"><canvas id="qr"></canvas></div><p class="note">Volunteers point their phone camera at this and open the link.'+(ov.season?' They only need to do it once a season.':' If it will not scan from a small screen, text the link instead.')+'</p>');
+    h=sheet(ov.title||(ov.season?'Season link':'Meet link'), '<div class="qrbox printable"><canvas id="qr"></canvas><div class="qrcap">'+esc(ov.title||'')+'</div></div><p class="note">'+esc(ov.note||('Volunteers point their phone camera at this and open the link.'+(ov.season?' They only need to do it once a season.':' If it will not scan from a small screen, text the link instead.')))+'</p>'+
+      '<div class="rowf"><button class="btn" data-act="print-qr">Print</button></div>');
+  }else if(ov.type==='sheet'){
+    h=sheet('Results sheet', '<div class="rowf"><button class="btn pri" data-act="dl-sheet">Save or share</button><button class="btn" data-act="print-sheet">Print / PDF</button></div><iframe id="sheetframe" class="sheetframe" title="Results sheet"></iframe>');
   }else if(ov.type==='scan'){
     h=sheet('Scan a code', (scan.cam==='blocked'?CAM_BLOCKED:'<div class="scanbox"><video id="scanv" playsinline muted></video></div>')+
       '<div class="banner '+(ov.kind||'ok')+'" id="scanmsg"><strong>'+esc(ov.msg||'Point the camera at a volunteer\'s Send screen.')+'</strong></div>'+
@@ -1066,6 +1141,7 @@ function renderOverlay(){
     show(); if(ov.frames.length>1) ovTimer=setInterval(() => { ov.idx=(ov.idx+1)%ov.frames.length; show(); }, 1100);
   }
   if(ov.type==='linkqr') drawQR($('qr'), ov.link);
+  if(ov.type==='sheet'){ const f=$('sheetframe'); if(f) f.srcdoc=ov.doc; }
   if(ov.type==='addrunner'){ const a=$('addname'); if(a) a.focus(); }
   if(ov.type==='scan') attachScan();
 }
@@ -1162,9 +1238,9 @@ function act(name,el){
   let st, r;
   switch(name){
     case 'tab': S.ui.tab=(!isOwner(meet)&&(d.tab==='setup'||d.tab==='results'))?'home':d.tab; S.ui.openRow=null; save(); render(); $('main').scrollTop=0;
-      if(S.ui.tab==='results'||S.ui.tab==='live') pullSheet(false);
+      if(S.ui.tab==='results'||S.ui.tab==='live'||S.ui.tab==='roster') pullSheet(false);
       if((S.ui.tab==='home'||S.ui.tab==='setup')&&isOwner(meet)) listSheet(false).then(() => { if((S.ui.tab==='home'||S.ui.tab==='setup')&&!typing()) render(); }); break;
-    case 'go': if(!meet) break;
+    case 'go': if(!meet||d.kind==='roster') break;
       if(d.kind!=='timer'&&!meet.config.schools.length){ toast(isOwner(meet)?'Add the schools in Setup first':'This meet has no schools yet. Ask the organizer for an updated link.'); break; }
       S.ui.lock={kind:d.kind}; S.ui.rosterSchool=null; save(); render(); break;
     case 'send': openSend(); break;
@@ -1211,7 +1287,7 @@ function act(name,el){
       else if(navigator.onLine===false) toast('No signal. It will upload by itself later, or use Send for the code.');
       else{ maybeUpload(true); toast('Uploading'); } break;
     case 'pull-sheet': pullSheet(true); break;
-    case 'live-race': S.ui.liveRace=raceId; save(); render(); break;
+    case 'live-race': S.ui.liveRace=raceId; S.ui.livePicked=true; save(); render(); break;
     case 'list-sheet': toast('Checking the Sheet'); listSheet(true).then(() => { if(!typing()) render(); }); break;
     case 'open-sheet-meet': openSheetMeet(d.m); break;
     case 'send-results': sendResults(meet); break;
@@ -1270,18 +1346,19 @@ function act(name,el){
     case 'rebuild': r=resultOf(meet,S.ui.resRace,true); r.cols=null; touchResult(meet,r); render(); toast('Rebuilt from the original taps'); break;
     case 'copy-tsv': copyText(toDelimited(meet,[S.ui.resRace],'\t'), 'Copied. Paste into cell A1 of a Google Sheet.', 'outtext'); break;
     case 'copy-all': copyText(toDelimited(meet,meet.config.races.map(x => x.id),'\t'), 'Copied all races. Paste into cell A1.', 'outtext'); break;
-    case 'dl-csv': { const fname=fileSlug(meet.config.name+' '+raceOf(meet,S.ui.resRace).name)+'.csv', text=toDelimited(meet,[S.ui.resRace],',');
-      /* on phones and tablets a share sheet is more dependable than a download */
-      let file=null; try{ file=new File([text],fname,{type:'text/csv'}); }catch(e){}
-      const touch=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
-      if(touch&&file&&navigator.canShare&&navigator.canShare({files:[file]})) navigator.share({files:[file], title:fname}).catch(e => { if(!e||e.name!=='AbortError') download(fname,text); });
-      else download(fname,text); break; }
+    case 'dl-csv': saveFile(fileSlug(meet.config.name+' '+raceOf(meet,S.ui.resRace).name)+'.csv', toDelimited(meet,[S.ui.resRace],','), 'text/csv'); break;
+    case 'open-sheet': ov={type:'sheet', doc:sheetDoc(meet)}; renderOverlay(); break;
+    case 'dl-sheet': saveFile(fileSlug(meet.config.name+' results')+'.html', ov.doc, 'text/html'); break;
+    case 'print-sheet': { const f=$('sheetframe'); if(f&&f.contentWindow){ f.contentWindow.focus(); f.contentWindow.print(); } break; }
+    case 'copy-results-link': copyText(resultsLink(), 'Results link copied. Anyone with it sees the finish list, nothing else.', 'linkout'); break;
+    case 'show-results-qr': ov={type:'linkqr', link:resultsLink(), title:'Results link', note:'Print this and post it at the course. Anyone who scans it sees the finish list as it comes in, and nothing else.'}; renderOverlay(); break;
+    case 'print-qr': window.print(); break;
   }
 }
 function bind(el){
   const meet=curMeet(), d=el.dataset, k=d.bind, i=d.i!=null?+d.i:-1, val=el.value; let r;
   if(!meet&&k!=='device-name'&&k!=='sound'&&k!=='cell-order'&&k!=='sheet-url') return;
-  if((k==='school-name'||k==='school-color'||k==='roster')&&!meet.config.schools[i]) return;
+  if((k==='school-name'||k==='school-color'||k==='roster'||k==='school-race')&&!meet.config.schools[i]) return;
   if(k==='race-name'&&!meet.config.races[i]) return;
   if(k==='roster'&&!raceOf(meet,d.race)) return;
   switch(k){
@@ -1296,6 +1373,11 @@ function bind(el){
     case 'cell-order': S.cellOrder=val==='fl'?'fl':'lf'; save(); break;
     case 'school-name': meet.config.schools[i].name=val.trim(); touchConfig(meet); break;
     case 'school-color': meet.config.schools[i].color=val; touchConfig(meet); pendingRender=true; break;
+    case 'school-race': { const sc=meet.config.schools[i], all=meet.config.races.map(r => r.id);
+      let list=Array.isArray(sc.races)?sc.races.filter(x => all.indexOf(x)>=0):all.slice();
+      if(el.checked){ if(list.indexOf(d.race)<0) list.push(d.race); } else list=list.filter(x => x!==d.race);
+      if(list.length===all.length) delete sc.races; else sc.races=list;
+      touchConfig(meet); break; }
     case 'race-name': meet.config.races[i].name=val.trim()||('Race '+(i+1)); touchConfig(meet); break;
     case 'roster': { const sidr=meet.config.schools[i].id, have={};
       meet.config.runners.forEach(u => { if(u.s===sidr&&u.r===d.race) have[u.n]=1; });
@@ -1306,6 +1388,11 @@ function bind(el){
       const sum=el.closest('details').querySelector('summary'), c=meet.config, sid=c.schools[i].id;
       el.value=c.runners.filter(u => u.s===sid&&u.r===d.race).map(u => u.n).join('\n');   /* show the names as they were understood */
       if(sum) sum.textContent='Rosters ('+c.races.map(rc => rc.name+' '+c.runners.filter(u => u.s===sid&&u.r===rc.id).length).join(', ')+')'; break; }
+    case 'place': { const n=Math.max(0, Math.round(+val)||0); setPlace(meet, d.u, n);
+      /* redraw now so the time and school check appear, keeping the cursor where it is (usually the next box) */
+      const a=document.activeElement, keep=a&&a.dataset&&a.dataset.bind==='place'?a.dataset.u:null; render();
+      if(keep){ const nx=document.querySelector('[data-bind="place"][data-u="'+keep+'"]'); if(nx){ nx.focus(); try{ nx.select(); }catch(e){} } }
+      return; }
     case 'res-finishers': r=resultOf(meet,S.ui.resRace,true); r.finishers=val===''?null:Math.max(0,Math.round(+val)||0); touchResult(meet,r); pendingRender=true; break;
     case 'res-adj': r=resultOf(meet,S.ui.resRace,true); r.startAdj=Math.round((parseFloat(val)||0)*1000); touchResult(meet,r); pendingRender=true; break;
     case 'res-src': r=resultOf(meet,S.ui.resRace,true); r['src'+d.kind.charAt(0).toUpperCase()+d.kind.slice(1)]=val; if(d.kind!=='roster') r.cols=null; touchResult(meet,r); pendingRender=true; break;

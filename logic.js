@@ -226,6 +226,12 @@ function parseNameLine(line, lastFirst){
   return lastFirst===true?swapNameOrder(line):tidyName(line);
 }
 /* Sort by last name: everything after the first word, so "Anna Van Dyke" files under V. Marks are ignored. */
+/* "First Last" -> {first, last}. Everything after the first word is the last name; marks such as (C) stay with it. */
+function splitName(n){
+  var t=nameTokens(n), w=t.words;
+  if(!w.length) return {first:'', last:String(n||'').trim()};
+  return {first:w[0], last:w.slice(1).concat(t.marks).join(' ')};
+}
 function nameKey(n){
   n=String(n||'').trim().toLowerCase();
   if(n.indexOf(',')>=0) return n;
@@ -310,14 +316,14 @@ function packConfig(c){
     groups[k][2].push(u.id, u.n);
   });
   return {x:2, i:c.id, n:c.name, d:c.date||'', v:c.ver||0, c:c.counter||0, y:c.sync||'', m:c.scoring==='dual'?'dual':'invite',
-    s:c.schools.map(function(s){ return [s.id,s.name,s.color]; }),
+    s:c.schools.map(function(s){ return Array.isArray(s.races)?[s.id,s.name,s.color,s.races]:[s.id,s.name,s.color]; }),
     r:c.races.map(function(r){ return [r.id,r.name]; }),
     u:order.map(function(k){ return groups[k]; })};
 }
 function unpackConfig(o){
   if(!o||o.x!==2||!o.i||!Array.isArray(o.s)||!Array.isArray(o.r)) return null;
   var c={id:String(o.i), name:String(o.n||'Meet'), date:String(o.d||''), ver:+o.v||0, counter:+o.c||0, deleted:false, sync:String(o.y||''), scoring:o.m==='dual'?'dual':'invite',
-    schools:o.s.map(function(s){ return {id:String(s[0]), name:String(s[1]||''), color:String(s[2]||'#7D858C')}; }),
+    schools:o.s.map(function(s){ var sc={id:String(s[0]), name:String(s[1]||''), color:String(s[2]||'#7D858C')}; if(Array.isArray(s[3])) sc.races=s[3].map(String); return sc; }),
     races:o.r.map(function(r){ return {id:String(r[0]), name:String(r[1]||'')}; }), runners:[]};
   (o.u||[]).forEach(function(g){
     var s=c.schools[g[0]], r=c.races[g[1]], list=g[2]||[]; if(!s||!r) return;
@@ -373,7 +379,7 @@ function unpackStreams(o){
 }
 
 var api={pad2:pad2, fmtTime:fmtTime, parseTime:parseTime, median:median, estimateOffset:estimateOffset, align:align,
-  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, dualScores:dualScores, csvCell:csvCell, syncRoster:syncRoster, parseNameLine:parseNameLine, swapNameOrder:swapNameOrder, tidyName:tidyName, nameKey:nameKey,
+  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, dualScores:dualScores, csvCell:csvCell, syncRoster:syncRoster, parseNameLine:parseNameLine, swapNameOrder:swapNameOrder, tidyName:tidyName, nameKey:nameKey, splitName:splitName,
   nextPlace:nextPlace, encodeText:encodeText, decodeText:decodeText, makeFrames:makeFrames, parseFrame:parseFrame,
   Assembler:Assembler, packConfig:packConfig, unpackConfig:unpackConfig, packStreams:packStreams, unpackStreams:unpackStreams};
 if(typeof module!=='undefined'&&module.exports) module.exports=api;

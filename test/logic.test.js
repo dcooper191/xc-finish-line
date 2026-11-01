@@ -73,6 +73,8 @@ eq('identical sequences', X.findSeqIssue(line, line.slice()), null);
   eq('second', [sc[1].s, sc[1].score], ['B', 35]);
   eq('incomplete team', [sc[2].s, sc[2].score], ['C', null]);
   eq('eighth runner removed', sc[0].places.length, 7); }
+eq('split name', X.splitName('Tristan Camina Cobiella'), {first:'Tristan', last:'Camina Cobiella'});
+eq('split name with mark', X.splitName('Ann Abel (C)'), {first:'Ann', last:'Abel (C)'});
 { // yesterday's boys race, scored as duals: Gunn beat Millbrook 24-31 and Salisbury 22-35, Millbrook beat Salisbury 19-36, Berkshire had four
   const boys = 'M S G G G G B M M M M S S G G S S S S S B M S S S S B G S M G S B S M M M M S M M G G S S M G S M S S S S S G S S'.split(' ');
   const d = X.dualScores(boys), pair = (a,b) => d.pairs.find(p => (p.a===a&&p.b===b)||(p.a===b&&p.b===a));
@@ -120,7 +122,7 @@ eq('sort key by last name', [X.nameKey('Ann Zed') > X.nameKey('Zoe Abel'), X.nam
 (async () => {
   // ---- meet setup round trip
   const cfg = {id:'m1', name:'Berkshire Invitational', date:'2026-10-10', ver:123, counter:0, deleted:false, sync:'https://script.google.com/macros/s/AKfycbTEST_123-abc/exec', scoring:'dual',
-    schools:[{id:'s1',name:'Berkshire',color:'#1F7A4D'},{id:'s2',name:'School B',color:'#1B2A5C'}], races:[{id:'g',name:'Girls'},{id:'b',name:'Boys'}], runners:[]};
+    schools:[{id:'s1',name:'Berkshire',color:'#1F7A4D'},{id:'s2',name:'School B',color:'#1B2A5C',races:['b']}], races:[{id:'g',name:'Girls'},{id:'b',name:'Boys'}], runners:[]};
   let c = 0; for(const s of cfg.schools) for(const r of cfg.races){
     const names = Array.from({length:40}, (_,i) => 'First'+i+' Lastname'+s.id+r.id+i);
     const o = X.syncRoster(cfg.runners, s.id, r.id, names, c); cfg.runners = o.runners; c = o.counter; }
