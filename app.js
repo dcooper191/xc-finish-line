@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.2';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.3';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -257,7 +257,7 @@ function upInfo(meet){ return (S.up&&S.up[meet.config.id])||{}; }
 function uploadPending(meet){ const sig=mySig(meet); return !!sig&&sig!==upInfo(meet).sig; }
 function lastActivity(meet){ return myStreams(meet).reduce((m,s) => Math.max(m,s.updatedAt||0), 0); }
 let upBusy=false, upErr=null, upTried=0, upFlash=0;
-/* During a race the phone uploads about every 10 seconds while there is something new; the upload runs in the
+/* During a race every tap is uploaded within a second or two (see scheduleUpload), with a 10-second sweep behind it; the upload runs in the
    background and never holds up a tap. Outside a race it uploads as soon as anything changes. */
 function maybeUpload(force){
   const meet=[curMeet()].concat(liveMeets()).find(m => m&&syncUrl(m)&&uploadPending(m)), url=syncUrl(meet);
@@ -269,8 +269,12 @@ function maybeUpload(force){
   sendPayload(meet).then(code => postSheet(url, {t:'up', meet:id, device:S.deviceId, name:S.deviceName||'', summary:sendSummary(meet), code}))
     .then(res => { if(!res||!res.ok) throw new Error((res&&res.error)||'The Sheet refused the upload'); (S.up=S.up||{})[id]={sig, at:Date.now()}; upErr=null; upFlash=Date.now(); save(); },
           e => { upErr=String((e&&e.message)||e); })
-    .then(() => { upBusy=false; softHeader(); softSync(); if(ov&&ov.type==='send'){ const el=$('upnote'); if(el) el.outerHTML=upNoteHTML(curMeet()); } });
+    .then(() => { upBusy=false; softHeader(); softSync(); if(ov&&ov.type==='send'){ const el=$('upnote'); if(el) el.outerHTML=upNoteHTML(curMeet()); }
+      if(!upErr&&uploadPending(curMeet())) scheduleUpload(); });   /* taps that landed during the upload go next */
 }
+/* Every tap is pushed about a second later, so the organizer's Results screen fills in as runners cross. */
+let upT=null;
+function scheduleUpload(){ clearTimeout(upT); upT=setTimeout(() => { upT=null; maybeUpload(true); }, 1200); }
 function upStatus(meet){
   if(!meet||!syncUrl(meet)||!myStreams(meet).some(hasData)) return null;
   if(upBusy) return ['', 'Uploading'];
@@ -454,8 +458,8 @@ function sendResults(meet){
   }).catch(e => { sheetMsg={kind:'warn', text:'The results did not go through ('+String((e&&e.message)||e)+'). Check the connection and try again, or use Copy.'}; })
     .then(() => { sheetBusy=false; if(typing()) deferRender(); else render(); });
 }
-setInterval(() => { maybeUpload(false); pushSetup(); followTick(false);
-  if((S.ui.tab==='results'||S.ui.tab==='live')&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 10000);
+setInterval(() => { maybeUpload(false); pushSetup(); followTick(false); }, 10000);
+setInterval(() => { if((S.ui.tab==='results'||S.ui.tab==='live')&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 5000);
 window.addEventListener('online', () => { softHeader(); softSync(); maybeUpload(false); pushSetup(); followTick(true); });
 window.addEventListener('offline', () => softHeader());
 
@@ -606,7 +610,7 @@ function liveHTML(meet){
   let h='<section class="sec"><div class="rowf" style="justify-content:space-between;align-items:center"><h2>'+esc(race.name)+'</h2>'+
     (su?'<button class="btn sm" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check now</button>':'')+'</div>'+
     (races.length>1?'<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="live-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>':'')+
-    '<p class="note pullnote">'+esc(su?pullNote()+' Phones upload every 10 seconds or so while they have signal.':'No Sheet connected: this shows what has been scanned or recorded on this device.')+'</p></section>';
+    '<p class="note pullnote">'+esc(su?pullNote()+' Phones push every tap while they have signal.':'No Sheet connected: this shows what has been scanned or recorded on this device.')+'</p></section>';
   if(!v.n) return h+'<div class="empty"><p>No finishers yet for '+esc(race.name)+'.</p></div>';
   h+='<div class="rtable live'+(named?' named':'')+'"><div class="rhead"><span>Pl</span><span>Time</span><span>School</span>'+(named?'<span>Name</span>':'')+'</div>';
   v.rows.forEach(row => { const sch=row.school?schoolOf(meet,row.school):null;
@@ -659,7 +663,7 @@ function setupHTML(meet){
   h+='</div><div class="rowf"><button class="btn" data-act="add-school">Add school</button></div></section>';
 
   const su=syncUrl(meet), raw=String(c.sync||'').trim();
-  h+='<section class="sec"><h2>Google Sheet</h2><p class="note">Optional, and set up once for the season. With it, each phone uploads its taps every 10 seconds or so while it has signal, Results on your device fills in during the race, and this meet\'s setup is kept on the Sheet so any device of yours can open it.</p>'+
+  h+='<section class="sec"><h2>Google Sheet</h2><p class="note">Optional, and set up once for the season. With it, each phone pushes every tap while it has signal, Results on your device fills in during the race, and this meet\'s setup is kept on the Sheet so any device of yours can open it.</p>'+
      '<ol class="steps"><li>Make a Google Sheet. In it, open Extensions, then Apps Script.</li><li>Press Copy the script here, and paste it over everything in the editor. Save.</li>'+
      '<li>Deploy, New deployment, type Web app. Execute as: Me. Who has access: Anyone. Deploy, and approve the permission request.</li>'+
      '<li>Copy the web app link (it ends in /exec) and paste it below. Then send the meet link to volunteers; it carries this setting.</li></ol>'+
@@ -777,7 +781,7 @@ function undoTimer(meet){
   meet.config.races.forEach(r => { const st=myStream(meet,r.id,'timer');
     if(st&&st.startedAt&&st.taps.length&&(!best||st.taps[st.taps.length-1]>best.taps[best.taps.length-1])) best=st; });
   if(!best){ toast('No taps to undo'); return; }
-  best.taps.pop(); touchStream(meet,best); softLock(); toast('Removed: '+raceOf(meet,best.raceId).name+' · Place '+(best.taps.length+1));
+  best.taps.pop(); touchStream(meet,best); softLock(); scheduleUpload(); toast('Removed: '+raceOf(meet,best.raceId).name+' · Place '+(best.taps.length+1));
 }
 
 /* ----- Schools console ----- */
@@ -835,7 +839,7 @@ function rosterPick(meet,raceId,uid,name){
   const place=placeOverride[raceId]||X.nextPlace(filled), was=filled[place]?((runnerMap(meet,raceId)[filled[place]]||{}).n||'a runner'):null;
   st.picks=st.picks.filter(p => p.p!==place);
   st.picks.push({p:place, u:uid, t:Date.now()}); delete placeOverride[raceId];
-  touchStream(meet,st); S.ui.rosterSchool=null; save(); render(); beep(660); buzz();
+  touchStream(meet,st); S.ui.rosterSchool=null; save(); render(); beep(660); buzz(); scheduleUpload();
   toast('Recorded: '+raceOf(meet,raceId).name+' · Place '+place+' · '+name+(was?' (replaced '+was+')':''));
 }
 
@@ -895,7 +899,7 @@ function resultsHTML(meet){
   if(!races.length) return '<div class="empty"><p>Add a race in Setup first.</p></div>';
   let rid=S.ui.resRace; if(!races.some(r => r.id===rid)){ rid=races[0].id; S.ui.resRace=rid; }
   const su=syncUrl(meet);
-  let h='<section class="sec"><h2>Collected</h2><p class="note">Meet code '+esc(meet.config.id)+'. '+(su?'Phones upload to the Sheet every 10 seconds or so while they have signal, and this screen checks it every 10 seconds. For a phone with no signal, scan its code.'
+  let h='<section class="sec"><h2>Collected</h2><p class="note">Meet code '+esc(meet.config.id)+'. '+(su?'Phones push every tap to the Sheet while they have signal, and this screen checks it every 5 seconds. For a phone with no signal, scan its code.'
       :'Scan each volunteer\'s code after the race. Lists recorded on this device are already here.')+'</p>'+checklistHTML(meet)+
     (su?'<p class="status pullnote">'+esc(pullNote())+'</p>'+phonesHTML(meet)+'<div id="others">'+otherMeetsHTML(meet)+'</div>':'')+
     '<div class="rowf">'+(su?'<button class="btn pri" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check the Sheet now</button>':'')+
@@ -1320,10 +1324,10 @@ function tap(el){
   }else if(kind==='time'){
     st=myStream(meet,raceId,'timer'); if(!st||!st.startedAt||st.endedAt) return;
     if(now-st.startedAt<1500) return;                /* nobody finishes within 1.5 s of the gun */
-    st.taps.push(now); touchStream(meet,st); beep(880); buzz(); flash(el); softLock();
+    st.taps.push(now); touchStream(meet,st); beep(880); buzz(); flash(el); softLock(); scheduleUpload();
   }else if(kind==='school'){
     st=myStream(meet,raceId,'school',true);
-    st.taps.push({t:now, s:el.dataset.s||null}); touchStream(meet,st); beep(660); buzz(); flash(el); softLock();
+    st.taps.push({t:now, s:el.dataset.s||null}); touchStream(meet,st); beep(660); buzz(); flash(el); softLock(); scheduleUpload();
   }
 }
 let holdT=null, holdEl=null;

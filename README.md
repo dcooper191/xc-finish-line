@@ -32,7 +32,7 @@ Per-meet links (Setup, under "Backup") still exist for a phone that has no signa
 
 ## Race day
 
-1. Every tap is saved on the phone the moment it happens. With the Sheet connected it also uploads in the background every 10 seconds or so.
+1. Every tap is saved on the phone the moment it happens. With the Sheet connected it is also pushed to the Sheet a second later, in the background.
 2. Keep the phone awake and the app in front. Guided Access (iOS) or app pinning (Android) stops stray swipes.
 3. After the race, Review on your device lists each phone and when it last uploaded, so nobody leaves with data still on their phone. Without the Sheet, each volunteer holds **Exit**, presses **Send**, and shows the code; you press **Scan a code** in Review.
 4. If a camera will not cooperate, **Copy as text** on the volunteer's phone and **Paste a code** on yours does the same job.
@@ -41,8 +41,8 @@ Per-meet links (Setup, under "Backup") still exist for a phone that has no signa
 
 With a Sheet connected, nobody has to hand anything over and you can watch the race come in:
 
-- Each phone uploads its tap lists about every 10 seconds while it has signal. Taps are always saved on the phone first; the upload runs in the background and never holds up a tap. The line under the buttons says what is on the phone and when the Sheet last got it.
-- **Results** on the organizer's device shows each race's finish list (Place, Time, School, and Name once the Roster station is used) and team scores so far, refreshed every 10 seconds.
+- Each phone pushes every tap to the Sheet about a second after it happens, while it has signal. Taps are always saved on the phone first; the upload runs in the background and never holds up a tap. The line under the buttons says what is on the phone and when the Sheet last got it.
+- **Results** on the organizer's device shows each race's finish list (Place, Time, School, and Name once the Roster station is used) and team scores so far, refreshed every 5 seconds.
 - Each meet's setup is saved on the Sheet as you edit it, and one meet is marked as today's. Volunteers' phones follow today's meet (on opening the app, when signal returns, when leaving a race screen, and every few minutes); a phone in the middle of a job is never switched. Organizer devices follow it too, unless you deliberately opened another meet.
 - Review warns when phones are uploading to a different copy of the meet than the one open, and can switch to it.
 - The QR codes remain as the backup for a phone with no signal.
