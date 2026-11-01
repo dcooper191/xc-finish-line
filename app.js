@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.7';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.8';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -660,6 +660,24 @@ function sheetDoc(meet){
   });
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' results</title><style>'+css+'</style></head><body>'+body+'</body></html>';
 }
+/* A printable poster for the results link: QR code, what it is, and the address in plain text. */
+function qrPosterDoc(link, meet){
+  const q=window.qrcode(0,'M'); q.addData(link,'Byte'); q.make();
+  const n=q.getModuleCount(), cell=10, quiet=4, size=(n+2*quiet)*cell, cv=document.createElement('canvas'); cv.width=cv.height=size;
+  const ctx=cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,size,size); ctx.fillStyle='#000';
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(q.isDark(r,c)) ctx.fillRect((c+quiet)*cell,(r+quiet)*cell,cell,cell);
+  const img=cv.toDataURL('image/png'), name=meet?meet.config.name:'', date=meet&&meet.config.date?niceDate(meet.config.date):'';
+  const css='@page{size:letter;margin:0}html,body{margin:0;height:100%}body{font-family:Helvetica,Arial,sans-serif;color:#15201B;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff}'+
+    '.card{width:7.5in;text-align:center;padding:0.6in 0.5in;box-sizing:border-box}.kick{font-size:14px;letter-spacing:.28em;text-transform:uppercase;color:#1D5C41;font-weight:700;margin:0 0 10px}'+
+    'h1{font-size:46px;letter-spacing:.02em;text-transform:uppercase;margin:0 0 6px;line-height:1}.sub{font-size:20px;color:#55655C;margin:0 0 30px}'+
+    '.qr{display:block;width:4.6in;height:4.6in;margin:0 auto 26px;border:6px solid #15201B;border-radius:18px;padding:10px;box-sizing:border-box}'+
+    '.how{font-size:19px;margin:0 0 16px;font-weight:600}.url{font-size:12px;color:#55655C;word-break:break-all;margin:0}.foot{margin-top:30px;font-size:12px;color:#9BACA2;letter-spacing:.2em;text-transform:uppercase}';
+  return '<!doctype html><html><head><meta charset="utf-8"><title>Results link</title><style>'+css+'</style></head><body><div class="card">'+
+    '<p class="kick">Cross Country</p><h1>Live Results</h1><p class="sub">'+esc(name)+(date?' · '+esc(date):'')+'</p>'+
+    '<img class="qr" src="'+img+'" alt="QR code">'+
+    '<p class="how">Point your phone camera at the code for the finish list and team scores as runners come in.</p>'+
+    '<p class="url">'+esc(link)+'</p><p class="foot">XC Finish Line</p></div></body></html>';
+}
 function saveFile(fname, text, type){
   let file=null; try{ file=new File([text],fname,{type}); }catch(e){}
   const touch=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
@@ -808,7 +826,7 @@ function rosterHTML(meet){
       let fb='';
       if(row){ fb=(row.time!=null?'<b>'+fmtTime(row.time+v.adj)+'</b>':'<span class="none">no time</span>')+(row.tapS?(row.tapS===u.s?' <span class="okword">&#10003;</span>':' <span class="warnline">&ne; tapped '+esc((schoolOf(meet,row.tapS)||{}).name||'?')+'</span>'):'');
         if(row.dup) fb+=' <span class="warnline">used twice</span>'; }
-      h+='<div class="prow"><span class="pname">'+esc(u.n)+'</span><input type="number" inputmode="numeric" min="1" class="pbox" data-bind="place" data-u="'+esc(u.id)+'" value="'+(row?row.i+1:'')+'" placeholder="#" aria-label="Place">'+
+      h+='<div class="prow"><span class="pname">'+esc(u.n)+'</span><input type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="next" autocomplete="off" class="pbox" data-bind="place" data-u="'+esc(u.id)+'" value="'+(row?row.i+1:'')+'" placeholder="#" aria-label="Place">'+
         '<span class="pfb">'+fb+'</span><button class="pdnf'+(st==='DNF'?' on':'')+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+(st==='DNF'?'DNS':'DNF')+'"'+(row?' hidden':'')+'>DNF</button></div>'; });
     h+='</div></section>';
   });
@@ -1117,7 +1135,7 @@ function renderOverlay(){
     h=sheet(ov.title||(ov.season?'Season link':'Meet link'), '<div class="qrbox printable"><canvas id="qr"></canvas><div class="qrcap">'+esc(ov.title||'')+'</div></div><p class="note">'+esc(ov.note||('Volunteers point their phone camera at this and open the link.'+(ov.season?' They only need to do it once a season.':' If it will not scan from a small screen, text the link instead.')))+'</p>'+
       '<div class="rowf"><button class="btn" data-act="print-qr">Print</button></div>');
   }else if(ov.type==='sheet'){
-    h=sheet('Results sheet', '<div class="rowf"><button class="btn pri" data-act="dl-sheet">Save or share</button><button class="btn" data-act="print-sheet">Print / PDF</button></div><iframe id="sheetframe" class="sheetframe" title="Results sheet"></iframe>');
+    h=sheet(ov.title||'Results sheet', '<div class="rowf"><button class="btn pri" data-act="print-sheet">Print / PDF</button><button class="btn" data-act="dl-sheet">Save or share</button></div><iframe id="sheetframe" class="sheetframe" title="'+esc(ov.title||'Results sheet')+'"></iframe>');
   }else if(ov.type==='scan'){
     h=sheet('Scan a code', (scan.cam==='blocked'?CAM_BLOCKED:'<div class="scanbox"><video id="scanv" playsinline muted></video></div>')+
       '<div class="banner '+(ov.kind||'ok')+'" id="scanmsg"><strong>'+esc(ov.msg||'Point the camera at a volunteer\'s Send screen.')+'</strong></div>'+
@@ -1375,10 +1393,10 @@ function act(name,el){
     case 'copy-all': copyText(toDelimited(meet,meet.config.races.map(x => x.id),'\t'), 'Copied all races. Paste into cell A1.', 'outtext'); break;
     case 'dl-csv': saveFile(fileSlug(meet.config.name+' '+raceOf(meet,S.ui.resRace).name)+'.csv', toDelimited(meet,[S.ui.resRace],','), 'text/csv'); break;
     case 'open-sheet': ov={type:'sheet', doc:sheetDoc(meet)}; renderOverlay(); break;
-    case 'dl-sheet': saveFile(fileSlug(meet.config.name+' results')+'.html', ov.doc, 'text/html'); break;
+    case 'dl-sheet': saveFile(ov.fname||(fileSlug(meet.config.name+' results')+'.html'), ov.doc, 'text/html'); break;
     case 'print-sheet': { const f=$('sheetframe'); if(f&&f.contentWindow){ f.contentWindow.focus(); f.contentWindow.print(); } break; }
     case 'copy-results-link': copyText(resultsLink(), 'Results link copied. Anyone with it sees the finish list, nothing else.', 'linkout'); break;
-    case 'show-results-qr': ov={type:'linkqr', link:resultsLink(), title:'Results link', note:'Print this and post it at the course. Anyone who scans it sees the finish list as it comes in, and nothing else.'}; renderOverlay(); break;
+    case 'show-results-qr': ov={type:'sheet', title:'Results link poster', doc:qrPosterDoc(resultsLink(), meet), fname:'results-link.html'}; renderOverlay(); break;
     case 'print-qr': window.print(); break;
   }
 }
@@ -1417,7 +1435,7 @@ function bind(el){
       if(sum) sum.textContent='Rosters ('+c.races.map(rc => rc.name+' '+c.runners.filter(u => u.s===sid&&u.r===rc.id).length).join(', ')+')'; break; }
     case 'place': { const n=Math.max(0, Math.round(+val)||0); setPlace(meet, d.u, n);
       /* redraw now so the time and school check appear, keeping the cursor where it is (usually the next box) */
-      const a=document.activeElement, keep=a&&a.dataset&&a.dataset.bind==='place'?a.dataset.u:null; render();
+      const a=document.activeElement, keep=placeNext||(a&&a.dataset&&a.dataset.bind==='place'?a.dataset.u:null); placeNext=null; render();
       if(keep){ const nx=document.querySelector('[data-bind="place"][data-u="'+keep+'"]'); if(nx){ nx.focus(); try{ nx.select(); }catch(e){} } }
       return; }
     case 'res-finishers': r=resultOf(meet,S.ui.resRace,true); r.finishers=val===''?null:Math.max(0,Math.round(+val)||0); touchResult(meet,r); pendingRender=true; break;
@@ -1469,6 +1487,13 @@ document.addEventListener('pointerup', () => { primeAudio(); cancelHold(); setTi
 document.addEventListener('pointercancel', () => { cancelHold(); pdown=false; });
 document.addEventListener('contextmenu', e => { if(S.ui.lock) e.preventDefault(); });
 document.addEventListener('keydown', e => {
+  /* Roster tab: Enter moves to the next runner's place box, like a spreadsheet */
+  if((e.key==='Enter'||e.key==='Tab')&&e.target&&e.target.dataset&&e.target.dataset.bind==='place'){
+    e.preventDefault(); const boxes=Array.from(document.querySelectorAll('[data-bind="place"]')), i=boxes.indexOf(e.target), nx=boxes[i+(e.shiftKey?-1:1)];
+    placeNext=nx?nx.dataset.u:null;
+    if(nx) nx.focus(); else e.target.blur();   /* leaving the box fires the change that saves the place */
+    return;
+  }
   /* a Bluetooth clicker taps the pad for the race on screen */
   if(!S.ui.lock||S.ui.lock.kind!=='timer'||e.repeat||ov) return;
   if([' ','Enter','PageDown','PageUp','ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].indexOf(e.key)<0) return;
@@ -1484,7 +1509,7 @@ document.addEventListener('touchmove', e => {
 ['gesturestart','gesturechange'].forEach(n => document.addEventListener(n, e => e.preventDefault()));
 let resizeT=null;
 window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT=setTimeout(() => { if(S.ui.lock&&!ov) render(true); }, 150); });
-let armed=null, armT=null, armedAt=0;
+let armed=null, armT=null, armedAt=0, placeNext=null;
 document.addEventListener('click', e => {
   primeAudio();
   const el=e.target.closest&&e.target.closest('[data-act]'); if(!el||el.disabled) return;
@@ -1501,6 +1526,7 @@ document.addEventListener('click', e => {
   }
   act(el.dataset.act, el);
 });
+document.addEventListener('focusin', e => { const t=e.target; if(t&&t.dataset&&t.dataset.bind==='place'){ try{ t.select(); }catch(x){} } });
 document.addEventListener('change', e => {
   const el=e.target; if(!el) return;
   if(el.id==='scanfile'&&el.files&&el.files[0]){ scanFromFile(el.files[0]); el.value=''; return; }
