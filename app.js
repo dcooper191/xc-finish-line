@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.3';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.4';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -601,6 +601,27 @@ function homeHTML(meet){
     '</section><section class="sec"><p class="note">'+(syncUrl(meet)?'When you are done, hold Exit. Your taps upload by themselves once the phone has signal, and the top of the screen says Uploaded. With no signal, press Send and show the code to the organizer.'
       :'When your race is over, hold Exit, press Send and show the code to the organizer.')+'</p></section>'+versionHTML();
 }
+/* Team scores, either as one meet (everyone's raw place) or as duals (every pair head to head). */
+function chipHTML(meet,sid){ const s=schoolOf(meet,sid); return s?'<span class="chip"><u style="background:'+esc(s.color)+'"></u><span>'+esc(s.name)+'</span></span>':esc(sid); }
+function scoresHTML(meet, v, heading){
+  const schools=v.rows.map(r => r.school), blanks=v.rows.filter(r => !r.school).length;
+  const note=blanks?' '+plural(blanks,'finisher')+' with no school yet, so these can still change.':'';
+  if(meet.config.scoring==='dual'){
+    const d=X.dualScores(schools); if(!d.pairs.length) return '';
+    return '<section class="sec"><h3>'+heading+'</h3><p class="note">Dual meet: each pair of teams scored head to head with the other teams removed. Top five score, a team needs five finishers.'+note+'</p>'+
+      '<div class="tscroll"><table class="grid"><thead><tr><th>Record</th><th>School</th><th>Finishers</th></tr></thead><tbody>'+
+      d.records.map(r => '<tr><td class="num">'+r.w+'-'+r.l+(r.t?'-'+r.t:'')+'</td><td>'+chipHTML(meet,r.s)+'</td><td>'+r.finishers+(r.finishers<5?' (fewer than five)':'')+'</td></tr>').join('')+'</tbody></table></div>'+
+      '<div class="tscroll"><table class="grid"><thead><tr><th>Score</th><th></th><th>Score</th><th></th></tr></thead><tbody>'+
+      d.pairs.map(p => { const wa=p.winner===p.a, wb=p.winner===p.b;
+        return '<tr><td class="num'+(wa?' win':'')+'">'+(p.sa==null?'inc.':p.sa)+'</td><td'+(wa?' class="win"':'')+'>'+chipHTML(meet,p.a)+'</td><td class="num'+(wb?' win':'')+'">'+(p.sb==null?'inc.':p.sb)+'</td><td'+(wb?' class="win"':'')+'>'+chipHTML(meet,p.b)+'</td></tr>'; }).join('')+
+      '</tbody></table></div></section>';
+  }
+  const sc=X.teamScores(schools); if(!sc.length) return '';
+  return '<section class="sec"><h3>'+heading+'</h3><p class="note">Scored as one meet: top five score, sixth and seventh displace, a team needs five finishers.'+note+'</p>'+
+    '<div class="tscroll"><table class="grid"><thead><tr><th>Score</th><th>School</th><th>Scoring places</th><th>Finishers</th></tr></thead><tbody>'+
+    sc.map(x => '<tr><td class="num">'+(x.score==null?'inc.':x.score)+'</td><td>'+chipHTML(meet,x.s)+'</td><td>'+(x.score==null?'fewer than five':x.places.slice(0,5).join(', ')+(x.places.length>5?' ('+x.places.slice(5).join(', ')+')':''))+'</td><td>'+x.finishers+'</td></tr>').join('')+
+    '</tbody></table></div></section>';
+}
 /* ----- Live: the finish list as it stands, for showing coaches at the race ----- */
 function liveHTML(meet){
   const races=meet.config.races, su=syncUrl(meet);
@@ -618,10 +639,7 @@ function liveHTML(meet){
       (sch?'<span class="chip"><u style="background:'+esc(sch.color)+'"></u><span>'+esc(sch.name)+'</span></span>':'<span class="none">'+(row.tap?'not sure':'no school')+'</span>')+
       (named?'<span class="nm2'+(row.name?'':' none')+'">'+esc(row.name||'')+'</span>':'')+'</div>'; });
   h+='</div>';
-  const sc=X.teamScores(v.rows.map(r => r.school));
-  if(sc.length) h+='<section class="sec"><h3>Team scores so far</h3><div class="tscroll"><table class="grid"><thead><tr><th>Score</th><th>School</th><th>Scoring places</th><th>In</th></tr></thead><tbody>'+
-    sc.map(x => { const s=schoolOf(meet,x.s); return '<tr><td class="num">'+(x.score==null?'inc.':x.score)+'</td><td><span class="chip"><u style="background:'+esc(s.color)+'"></u><span>'+esc(s.name)+'</span></span></td><td>'+(x.score==null?'fewer than five':x.places.slice(0,5).join(', '))+'</td><td>'+x.finishers+'</td></tr>'; }).join('')+'</tbody></table></div>'+
-    '<p class="note">Scored as one meet. Corrections made in Review show here too.</p></section>';
+  h+=scoresHTML(meet, v, 'Team scores'+(v.rows.some(r => r.time==null)||!v.r.finishers?' so far':''));
   return h;
 }
 
@@ -638,7 +656,8 @@ function setupHTML(meet){
   h+=meetPickerHTML(meet);
   h+='<p class="note">Meet code <strong>'+esc(c.id)+'</strong>. It is in every link for this meet and on the Sheet, so you can tell copies apart.</p>'+
      '<div class="rowf"><label class="field" style="flex:2 1 200px"><span>Meet name</span><input type="text" id="meetname" data-bind="meet-name" value="'+esc(c.name)+'"></label>'+
-     '<label class="field" style="flex:1 1 150px"><span>Date</span><input type="date" id="meetdate" data-bind="meet-date" value="'+esc(c.date||'')+'"></label></div>'+
+     '<label class="field" style="flex:1 1 150px"><span>Date</span><input type="date" id="meetdate" data-bind="meet-date" value="'+esc(c.date||'')+'"></label>'+
+     '<label class="field" style="flex:1 1 200px"><span>Scoring</span><select id="scoring" data-bind="scoring"><option value="invite"'+(c.scoring==='dual'?'':' selected')+'>Invitational (raw places)</option><option value="dual"'+(c.scoring==='dual'?' selected':'')+'>Dual meet (head to head)</option></select></label></div>'+
      '<div class="rowf"><button class="btn" data-act="new-meet">New meet (copies schools and rosters)</button></div></section>';
 
   h+='<section class="sec"><h2>Races</h2><p class="note">Each race has its own start, its own places and its own rosters. Two can run at once.</p><div class="list">';
@@ -960,15 +979,7 @@ function resultsHTML(meet){
           ['DNS','DNF'].map(k => '<button aria-pressed="'+(st===k)+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+k+'">'+k+'</button>').join('')+'</div></div>'; }).join('')+'</div></section>';
   }
 
-  const sc=X.teamScores(v.rows.map(r => r.school));
-  if(sc.length){
-    const blanks=v.rows.filter(r => !r.school).length;
-    h+='<section class="sec"><h2>Team scores</h2><p class="note">Scored as one meet: top five score, sixth and seventh displace, and a team needs five finishers.'+(blanks?' '+plural(blanks,'finisher')+' with no school yet, so these can still change.':'')+'</p>'+
-       '<div class="tscroll"><table class="grid"><thead><tr><th>Score</th><th>School</th><th>Scoring places</th><th>Finishers</th></tr></thead><tbody>'+
-       sc.map(x => { const s=schoolOf(meet,x.s); return '<tr><td class="num">'+(x.score==null?'inc.':x.score)+'</td><td><span class="chip"><u style="background:'+esc(s.color)+'"></u><span>'+esc(s.name)+'</span></span></td><td>'+
-         (x.score==null?'fewer than five':x.places.slice(0,5).join(', ')+(x.places.length>5?' ('+x.places.slice(5).join(', ')+')':''))+'</td><td>'+x.finishers+'</td></tr>'; }).join('')+
-       '</tbody></table></div></section>';
-  }
+  h+=scoresHTML(meet, v, 'Team scores');
 
   h+='<section class="sec"><h2>Export</h2><p class="note">Columns are Place, School, Name, Time.'+(su?' Sending puts every race on its own tab of your Sheet.':' Copy, then paste into cell A1 of a Google Sheet.')+'</p><div class="rowf">'+
      (su?'<button class="btn pri" data-act="send-results"'+(sheetBusy?' disabled':'')+'>'+(sheetBusy?'Sending':'Send results to the Sheet')+'</button>':'')+
@@ -1120,7 +1131,7 @@ function scanFromFile(file){
 /* ---------- actions ---------- */
 function newMeet(){
   const prev=curMeet(), id='m'+rid(6);
-  const cfg={id, name:'New meet', date:today(), ver:Date.now(), deleted:false, counter:prev?prev.config.counter||0:0, sync:prev?prev.config.sync||'':'',
+  const cfg={id, name:'New meet', date:today(), ver:Date.now(), deleted:false, counter:prev?prev.config.counter||0:0, sync:prev?prev.config.sync||'':'', scoring:prev&&prev.config.scoring==='dual'?'dual':'invite',
     schools:prev?clone(prev.config.schools):[{id:'s'+rid(3), name:'Berkshire', color:'#1F7A4D'}],
     races:prev?clone(prev.config.races):[{id:'g', name:'Girls'},{id:'b', name:'Boys'}],
     runners:prev?clone(prev.config.runners):[]};
@@ -1277,6 +1288,7 @@ function bind(el){
     case 'pick-meet': if(!S.meets[val]) break; S.meetId=val; Object.assign(S.ui,{resRace:null, openRow:null, lock:null, rosterSchool:null}); save(); pendingRender=true; break;
     case 'meet-name': meet.config.name=val.trim()||'Untitled meet'; touchConfig(meet); pendingRender=true; break;
     case 'meet-date': meet.config.date=val; touchConfig(meet); break;
+    case 'scoring': meet.config.scoring=val==='dual'?'dual':'invite'; touchConfig(meet); pendingRender=true; break;
     case 'device-name': S.deviceName=val.trim().slice(0,30); save(); break;
     case 'sound': S.sound=val==='1'; save(); break;
     case 'sync-url': meet.config.sync=val.trim(); if(syncUrl(meet)) S.sheet=syncUrl(meet); touchConfig(meet); pendingRender=true; break;

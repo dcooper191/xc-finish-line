@@ -181,6 +181,7 @@ table.grid th{font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;col
 table.grid td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
 table.grid td.num{font-family:var(--display);font-weight:700;font-size:1.25rem}
 table.grid td.miss{color:var(--warn);font-weight:600}
+table.grid td.win{color:var(--ok)} table.grid td.win .chip span{font-weight:700}
 .rtable{border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
 .rhead,.rrow{display:grid;grid-template-columns:2.1rem 4.5rem minmax(0,1fr) minmax(0,1.25fr);gap:8px;align-items:center;padding:0 10px}
 .rhead{font-size:.74rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-block:8px;background:var(--sunk)}

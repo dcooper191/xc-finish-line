@@ -73,6 +73,14 @@ eq('identical sequences', X.findSeqIssue(line, line.slice()), null);
   eq('second', [sc[1].s, sc[1].score], ['B', 35]);
   eq('incomplete team', [sc[2].s, sc[2].score], ['C', null]);
   eq('eighth runner removed', sc[0].places.length, 7); }
+{ // yesterday's boys race, scored as duals: Gunn beat Millbrook 24-31 and Salisbury 22-35, Millbrook beat Salisbury 19-36, Berkshire had four
+  const boys = 'M S G G G G B M M M M S S G G S S S S S B M S S S S B G S M G S B S M M M M S M M G G S S M G S M S S S S S G S S'.split(' ');
+  const d = X.dualScores(boys), pair = (a,b) => d.pairs.find(p => (p.a===a&&p.b===b)||(p.a===b&&p.b===a));
+  const gm = pair('G','M'); eq('dual Gunn v Millbrook', [gm.a==='G'?gm.sa:gm.sb, gm.a==='M'?gm.sa:gm.sb, gm.winner], [24, 31, 'G']);
+  const gs = pair('G','S'); eq('dual Gunn v Salisbury', [gs.a==='G'?gs.sa:gs.sb, gs.a==='S'?gs.sa:gs.sb, gs.winner], [22, 35, 'G']);
+  const ms = pair('M','S'); eq('dual Millbrook v Salisbury', [ms.a==='M'?ms.sa:ms.sb, ms.a==='S'?ms.sa:ms.sb, ms.winner], [19, 36, 'M']);
+  const bs = pair('B','S'); eq('incomplete team loses, places kept', [bs.winner, bs.a==='B'?bs.pa:bs.pb], ['S', [2,9,10,11]]);
+  eq('dual records', d.records.map(r => r.s+' '+r.w+'-'+r.l), ['G 3-0','M 2-1','S 1-2','B 0-3']); }
 
 // ---- roster editing keeps ids
 { let r = X.syncRoster([], 's1', 'g', ['Ann Lee', 'Bea Cho', 'Cy Dunn'], 0);
@@ -111,7 +119,7 @@ eq('sort key by last name', [X.nameKey('Ann Zed') > X.nameKey('Zoe Abel'), X.nam
 
 (async () => {
   // ---- meet setup round trip
-  const cfg = {id:'m1', name:'Berkshire Invitational', date:'2026-10-10', ver:123, counter:0, deleted:false, sync:'https://script.google.com/macros/s/AKfycbTEST_123-abc/exec',
+  const cfg = {id:'m1', name:'Berkshire Invitational', date:'2026-10-10', ver:123, counter:0, deleted:false, sync:'https://script.google.com/macros/s/AKfycbTEST_123-abc/exec', scoring:'dual',
     schools:[{id:'s1',name:'Berkshire',color:'#1F7A4D'},{id:'s2',name:'School B',color:'#1B2A5C'}], races:[{id:'g',name:'Girls'},{id:'b',name:'Boys'}], runners:[]};
   let c = 0; for(const s of cfg.schools) for(const r of cfg.races){
     const names = Array.from({length:40}, (_,i) => 'First'+i+' Lastname'+s.id+r.id+i);

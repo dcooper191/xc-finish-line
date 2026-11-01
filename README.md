@@ -65,6 +65,7 @@ Review can **Send results to the Sheet**, which writes each race to its own tab.
 - Times and school taps are matched by time of day, after the constant offset between the two devices is estimated and removed. A missed or extra tap shows up as a place where the two lists stop matching.
 - School taps and roster entries are matched by school sequence. The roster's school is used for the result; disagreements are listed.
 - Place cards stay the authority on finish order. Enter the number handed out to compare counts.
+- Scoring is chosen per meet in Setup: **Invitational** (everyone's raw place; top five score, sixth and seventh displace) or **Dual meet** (every pair of teams scored head to head with the other teams removed, each team's runners past its seventh dropped first; a team without five finishers loses by default). Both views show the result on the Results and Review tabs.
 - Rostered runners with no place are listed and exported as DNS (or DNF if marked), but only once a race has at least one name recorded. A race run with Timer and Schools only exports Place, School and Time with no DNS rows.
 
 ## Changing the app

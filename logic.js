@@ -152,6 +152,29 @@ function teamScores(rowSchools){
   out.sort(function(x,y){ return ((x.score==null)-(y.score==null)) || (x.score-y.score) || (x.sixth-y.sixth) || (x.s<y.s?-1:1); });
   return out;
 }
+/* Dual-meet scoring: every pair of teams is scored head to head as if only those two had run. Each team's runners
+   past its seventh are removed first, the rest are re-placed, the first five score. A team without five finishers
+   loses to any team that has five. Returns the pairings and each team's win-loss record. */
+function dualScores(rowSchools){
+  var teams=[], count={};
+  rowSchools.forEach(function(s){ if(!s) return; if(!count[s]){ count[s]=0; teams.push(s); } count[s]++; });
+  var pairs=[], rec={};
+  teams.forEach(function(t){ rec[t]={w:0, l:0, t:0}; });
+  for(var i=0;i<teams.length;i++) for(var j=i+1;j<teams.length;j++){
+    var a=teams[i], b=teams[j], seen={}, pos=0, places={};
+    places[a]=[]; places[b]=[];
+    rowSchools.forEach(function(s){ if(s!==a&&s!==b) return; seen[s]=(seen[s]||0)+1; if(seen[s]>7) return; pos++; places[s].push(pos); });
+    var sum=function(p){ return p.slice(0,5).reduce(function(x,y){return x+y;},0); };
+    var fa=places[a].length>=5, fb=places[b].length>=5, sa=fa?sum(places[a]):null, sb=fb?sum(places[b]):null, win=null;
+    if(fa&&fb){ if(sa<sb) win=a; else if(sb<sa) win=b; else win=places[a][5]<places[b][5]?a:places[b][5]<places[a][5]?b:null; }   /* tie: sixth runner */
+    else if(fa) win=a; else if(fb) win=b;
+    if(win===a){ rec[a].w++; rec[b].l++; } else if(win===b){ rec[b].w++; rec[a].l++; } else { rec[a].t++; rec[b].t++; }
+    pairs.push({a:a, b:b, sa:sa, sb:sb, pa:places[a], pb:places[b], winner:win});
+  }
+  var records=teams.map(function(t){ return {s:t, finishers:count[t], w:rec[t].w, l:rec[t].l, t:rec[t].t}; });
+  records.sort(function(x,y){ return (y.w-x.w)||(x.l-y.l)||(x.s<y.s?-1:1); });
+  return {pairs:pairs, records:records};
+}
 function csvCell(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 
 /* ---------- roster helpers ---------- */
@@ -286,14 +309,14 @@ function packConfig(c){
     if(!groups[k]){ groups[k]=[sIdx[u.s], rIdx[u.r], []]; order.push(k); }
     groups[k][2].push(u.id, u.n);
   });
-  return {x:2, i:c.id, n:c.name, d:c.date||'', v:c.ver||0, c:c.counter||0, y:c.sync||'',
+  return {x:2, i:c.id, n:c.name, d:c.date||'', v:c.ver||0, c:c.counter||0, y:c.sync||'', m:c.scoring==='dual'?'dual':'invite',
     s:c.schools.map(function(s){ return [s.id,s.name,s.color]; }),
     r:c.races.map(function(r){ return [r.id,r.name]; }),
     u:order.map(function(k){ return groups[k]; })};
 }
 function unpackConfig(o){
   if(!o||o.x!==2||!o.i||!Array.isArray(o.s)||!Array.isArray(o.r)) return null;
-  var c={id:String(o.i), name:String(o.n||'Meet'), date:String(o.d||''), ver:+o.v||0, counter:+o.c||0, deleted:false, sync:String(o.y||''),
+  var c={id:String(o.i), name:String(o.n||'Meet'), date:String(o.d||''), ver:+o.v||0, counter:+o.c||0, deleted:false, sync:String(o.y||''), scoring:o.m==='dual'?'dual':'invite',
     schools:o.s.map(function(s){ return {id:String(s[0]), name:String(s[1]||''), color:String(s[2]||'#7D858C')}; }),
     races:o.r.map(function(r){ return {id:String(r[0]), name:String(r[1]||'')}; }), runners:[]};
   (o.u||[]).forEach(function(g){
@@ -350,7 +373,7 @@ function unpackStreams(o){
 }
 
 var api={pad2:pad2, fmtTime:fmtTime, parseTime:parseTime, median:median, estimateOffset:estimateOffset, align:align,
-  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, csvCell:csvCell, syncRoster:syncRoster, parseNameLine:parseNameLine, swapNameOrder:swapNameOrder, tidyName:tidyName, nameKey:nameKey,
+  nearestDiffs:nearestDiffs, findIssue:findIssue, findSeqIssue:findSeqIssue, teamScores:teamScores, dualScores:dualScores, csvCell:csvCell, syncRoster:syncRoster, parseNameLine:parseNameLine, swapNameOrder:swapNameOrder, tidyName:tidyName, nameKey:nameKey,
   nextPlace:nextPlace, encodeText:encodeText, decodeText:decodeText, makeFrames:makeFrames, parseFrame:parseFrame,
   Assembler:Assembler, packConfig:packConfig, unpackConfig:unpackConfig, packStreams:packStreams, unpackStreams:unpackStreams};
 if(typeof module!=='undefined'&&module.exports) module.exports=api;
