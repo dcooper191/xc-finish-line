@@ -17,7 +17,7 @@ Connect a Google Sheet once (below). After that:
 1. **Set up each meet in the app's Setup** (schools, rosters if you want names, races). Every change is saved to the Sheet by itself.
 2. Press **Make this today's meet**. That is the whole hand-off.
 3. Volunteers open the **season link** once, in September. Every race day they open the app with signal and it shows today's meet, with only Timer, Schools and Roster. No new links, ever.
-4. Your own phone or tablet opens the **organizer season link** once. The plain address then opens today's meet with Live, Results and Setup, and the home screen lists every meet on the Sheet: open another one, mark one as today's, or delete one (which removes its setup, uploads and result tabs from the Sheet).
+4. The plain address of the app is always the full view: today's meet with Live, Results and Setup, and a home screen that lists every meet on the Sheet: open another one, mark one as today's, or delete one (which removes its setup, uploads and result tabs from the Sheet). A device of yours that has never opened the app needs the Sheet connected once: paste the web app link, or open the "link for your own other devices" from Setup.
 
 The only thing that carries data is the Sheet, so a browser that cleared its storage, or a lost link, costs nothing: open the app, paste the Sheet's web app link, and everything is back.
 
@@ -27,7 +27,7 @@ Per-meet links (Setup, under "Backup") still exist for a phone that has no signa
 
 1. Open the app, go to **Setup**, create the meet, add the schools and paste each roster (one runner per line, per race). Names can arrive as one cell or two, last name first or first name first; a setting above the rosters says which. They are stored and shown first name first and sorted by last name.
 2. Press **Copy volunteer meet link** and text it to the volunteers. The link contains the rosters, so send it only to them. Send it again if you change anything.
-   - The volunteer link always shows only Timer, Schools and Roster, on any device, including yours. Live, Results and Setup appear on the device that created the meet when the app is opened at its plain address, and on any device you open the **organizer meet link** on. Every link carries the meet's code (shown in the header), so copies of a meet can be told apart.
+   - A volunteer link always shows only Timer, Schools and Roster, on any device, including yours. The plain address always shows the full view. Every link carries the meet's code (shown in the header), so copies of a meet can be told apart.
 3. Each volunteer opens the link once while they have a connection and waits for **Works offline** at the top.
 
 ## Race day

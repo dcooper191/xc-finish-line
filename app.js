@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-10-31.2';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.1';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -48,13 +48,12 @@ function adoptStored(str){
 }
 
 function curMeet(){ const m=S.meets[S.meetId]; return (m&&!m.config.deleted)?m:null; }
-/* Organizer view (Setup and Results) or volunteer view (the three jobs only).
-   The volunteer link ALWAYS gives the volunteer view, on any device, the organizer's included: what the link shows
-   is what volunteers get. The organizer view needs a device that created the meet or opened the organizer link,
-   and a page that was not opened from the volunteer link. */
+/* Two views. The plain address is always the full app: manage meets, Live, Results, Setup and the three jobs.
+   A volunteer link (#s= season link or #m= meet link) ALWAYS gives the stripped-down volunteer view, the three
+   jobs only, on any device: what the link shows is what volunteers get. Nothing has to be set up on a device. */
 function volunteerURL(){ return /#[ms]=/.test(location.hash||''); }
 function todayId(){ return (listInfo&&!listInfo.err&&listInfo.today)||''; }
-function isOwner(meet){ return !!(meet&&meet.own)&&!volunteerURL(); }
+function isOwner(meet){ return !!meet&&!volunteerURL(); }
 function liveMeets(){ return Object.values(S.meets).filter(m => !m.config.deleted)
   .sort((a,b) => (b.config.date||'').localeCompare(a.config.date||'')||(b.config.ver||0)-(a.config.ver||0)); }
 function schoolOf(meet,id){ return meet.config.schools.find(s => s.id===id)||null; }
@@ -324,7 +323,7 @@ function followToday(force, announce){
     if(li.err) return {ok:!!meet, quiet:!announce, msg:li.err==='oldscript'?'The Sheet runs an older script. Update it from Setup.':'Could not reach the Sheet: '+li.err};
     const today=li.today, m=today&&li.meets.find(x => x.meet===today);
     if(!m||!m.setup) return {ok:!!meet, quiet:!announce, msg:'No meet is marked as today\'s on the Sheet yet.'+(meet?' Staying on '+meet.config.name+'.':'')};
-    const own=!!S.org, cur=curMeet();
+    const own=!volunteerURL(), cur=curMeet();
     if(cur&&cur.config.id!==today&&S.ui.lock) return {ok:true, quiet:!announce, msg:'Today\'s meet is '+m.name+'. Exit the current job and it will switch.'};
     if(cur&&cur.config.id!==today&&own&&S.chosen&&S.chosen.meet===cur.config.id&&S.chosen.today===today) return {ok:true, quiet:true, msg:''};   /* organizer picked this one on purpose */
     const before=cur?cur.config.id+':'+cur.config.ver:'';
@@ -560,13 +559,13 @@ function mainHTML(meet){
   return warn+homeHTML(meet);
 }
 function noMeetHTML(){
-  const su=sheetUrl();
-  return '<section class="sec"><h2>No meet on this device</h2><p class="note">'+(su?'This device is connected to the Sheet, but no meet is marked as today\'s meet yet'+(S.org?'. Mark one below, or make a new one.':'. Ask the organizer, then open the app again.'):'Volunteers: open the season link you were sent, or paste it here.')+'</p>'+
-    (su?'':'<label class="field"><span>Link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste the link"></textarea></label><div class="rowf"><button class="btn pri" data-act="import-link">Open</button></div>')+'</section>'+
-    (su?'':'<section class="sec"><h3>Organizing?</h3><p class="note">Paste your Sheet\'s web app link (Setup, or Apps Script, Manage deployments) and this device becomes an organizer\'s, with every meet on the Sheet available. Or create a meet without a Sheet.</p>'+
-    '<label class="field"><span>Web app link</span><input type="text" id="sheeturl" data-bind="sheet-url" value="'+esc(S.sheet||'')+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
-    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div></section>')+
-    (S.org?sheetMeetsHTML(null):'')+versionHTML();
+  const su=sheetUrl(), vol=volunteerURL();
+  if(vol) return '<section class="sec"><h2>No meet yet</h2><p class="note">'+(su?'No meet is marked as today\'s on the Sheet yet. Ask the organizer, then open the app again with signal.':'Open the season link you were sent, or paste it here.')+'</p>'+
+    (su?'':'<label class="field"><span>Link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste the link"></textarea></label><div class="rowf"><button class="btn pri" data-act="import-link">Open</button></div>')+'</section>'+versionHTML();
+  return '<section class="sec"><h2>'+(su?'No meet marked as today\'s':'Connect your Sheet')+'</h2><p class="note">'+(su?'The Sheet is connected. Mark a meet below as today\'s, or make a new one.':'Paste your Sheet\'s web app link once (it ends in /exec; find it in Apps Script under Deploy, Manage deployments). Every meet on the Sheet is then available here. Or create a meet without a Sheet.')+'</p>'+
+    (su?'':'<label class="field"><span>Web app link</span><input type="text" id="sheeturl" data-bind="sheet-url" value="'+esc(S.sheet||'')+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
+    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div>')+'</section>'+
+    (su?sheetMeetsHTML(null):'')+versionHTML();
 }
 function versionHTML(){
   return '<section class="sec"><p class="note">Version '+APP_VERSION+'.'+(updateWaiting?' A newer version is ready.':'')+'</p>'+
@@ -587,16 +586,16 @@ function homeHTML(meet){
   const isToday=todayId()===meet.config.id, owner=isOwner(meet);
   return '<section class="sec"><h2>'+esc(meet.config.name)+(isToday?' <span class="badge">Today\'s meet</span>':'')+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date))+'. ':'')+
     (owner&&sheetUrl()&&!isToday&&todayId()?'This is not the meet marked as today\'s; volunteers\' phones are on the other one. ':'')+
-    'This device is set up for the meet and needs no signal from here on. Pick your job.</p>'+(owner?'':meetPickerHTML(meet))+
+    (owner?'Setup, Live and Results are in the tabs above. The jobs below are the volunteers\' screens.':'This device is set up for the meet and needs no signal from here on. Pick your job.')+'</p>'+(owner?'':meetPickerHTML(meet))+
     (owner&&sheetUrl()&&!isToday?'<div class="rowf"><button class="btn pri" data-act="set-today" data-m="'+esc(meet.config.id)+'" data-confirm="Tap again: today\'s meet">Make this today\'s meet</button></div>':'')+
-    '<div class="rowf">'+deviceNameField()+soundField()+'</div></section>'+
+    (owner?'':'<div class="rowf">'+deviceNameField()+soundField()+'</div>')+'</section>'+
+    (owner?sheetMeetsHTML(meet)+'<section class="sec"><div class="rowf">'+deviceNameField()+soundField()+'</div></section>':'')+
     '<section class="roles">'+
     '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses. Switch races at the top.</span></button>'+
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
     '<button class="role c2" data-act="go" data-kind="roster"><b>Roster</b><span>End of the chute. Take each card, tap the school, then the runner\'s name.</span></button>'+
     '</section><section class="sec"><p class="note">'+(syncUrl(meet)?'When you are done, hold Exit. Your taps upload by themselves once the phone has signal, and the top of the screen says Uploaded. With no signal, press Send and show the code to the organizer.'
-      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+(isOwner(meet)?' This is the organizer\'s device: Live, Results and Setup are in the tabs above.':'')+'</p></section>'+
-    (isOwner(meet)?sheetMeetsHTML(meet):'')+versionHTML();
+      :'When your race is over, hold Exit, press Send and show the code to the organizer.')+'</p></section>'+versionHTML();
 }
 /* ----- Live: the finish list as it stands, for showing coaches at the race ----- */
 function liveHTML(meet){
@@ -672,9 +671,9 @@ function setupHTML(meet){
   h+='<section class="sec"><h2>Today\'s meet</h2>'+(su?'<p class="note">'+(isToday?'This is today\'s meet. Volunteers\' phones open it by themselves.':'Volunteers\' phones open whichever meet is marked as today\'s. '+(todayId()?'Right now that is another meet.':'None is marked yet.'))+'</p>'+
      (isToday?'':'<div class="rowf"><button class="btn pri" data-act="set-today" data-m="'+esc(c.id)+'" data-confirm="Tap again: today\'s meet">Make this today\'s meet</button></div>')
      :'<p class="note">Connect a Sheet above and volunteers follow today\'s meet with one season link. Without it, each meet needs its own link, below.</p>')+'</section>';
-  h+='<section class="sec"><h2>Links</h2>'+(su?'<p class="note">One <strong>season link</strong> for volunteers, sent once. It connects their phone to the Sheet and opens today\'s meet, with only Timer, Schools and Roster. Your own other devices get the organizer version, which adds Live, Results and Setup and lists every meet. Keep that one to yourself.</p>'+
+  h+='<section class="sec"><h2>Links</h2>'+(su?'<p class="note">One <strong>season link</strong> for volunteers, sent once. It connects their phone to the Sheet and opens today\'s meet, with only Timer, Schools and Roster. The plain address of the app is always this full view; a phone or tablet of yours that has never opened the app can be connected to the Sheet with the second link.</p>'+
      '<div class="rowf"><button class="btn pri" data-act="copy-season">Copy season link for volunteers</button>'+(navigator.share?'<button class="btn" data-act="share-season">Share</button>':'')+'<button class="btn" data-act="show-season-qr">Show as QR code</button></div>'+
-     '<div class="rowf"><button class="btn" data-act="copy-season-org">Copy organizer season link</button></div>':'')+
+     '<div class="rowf"><button class="btn" data-act="copy-season-org">Copy link for your own other devices</button></div>':'')+
      '<details class="roster"><summary>'+(su?'Backup: links for this meet only (no signal needed)':'Links for this meet')+'</summary><p class="note">A meet link carries this meet\'s setup inside it, so a phone with no signal can still load the meet. The volunteer link shows only Timer, Schools and Roster; the organizer link adds Live, Results and Setup. Send it again after any change.</p>'+
      '<div class="rowf"><button class="btn" data-act="copy-link">Copy volunteer meet link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
      '<button class="btn" data-act="show-link-qr">Show as QR code</button><button class="btn" data-act="copy-org-link">Copy organizer meet link</button></div></details><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
