@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.8';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.9';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -675,8 +675,8 @@ function qrPosterDoc(link, meet){
   return '<!doctype html><html><head><meta charset="utf-8"><title>Results link</title><style>'+css+'</style></head><body><div class="card">'+
     '<p class="kick">Cross Country</p><h1>Live Results</h1><p class="sub">'+esc(name)+(date?' · '+esc(date):'')+'</p>'+
     '<img class="qr" src="'+img+'" alt="QR code">'+
-    '<p class="how">Point your phone camera at the code for the finish list and team scores as runners come in.</p>'+
-    '<p class="url">'+esc(link)+'</p><p class="foot">XC Finish Line</p></div></body></html>';
+    '<p class="how">Finish list and team scores as runners come in</p>'+
+    '<p class="url">'+esc(link)+'</p></div></body></html>';
 }
 function saveFile(fname, text, type){
   let file=null; try{ file=new File([text],fname,{type}); }catch(e){}
