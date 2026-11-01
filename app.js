@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.1';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.2';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -48,7 +48,7 @@ function adoptStored(str){
 }
 
 function curMeet(){ const m=S.meets[S.meetId]; return (m&&!m.config.deleted)?m:null; }
-/* Two views. The plain address is always the full app: manage meets, Live, Results, Setup and the three jobs.
+/* Two views. The plain address is always the full app: manage meets, Results, Review, Setup and the three jobs.
    A volunteer link (#s= season link or #m= meet link) ALWAYS gives the stripped-down volunteer view, the three
    jobs only, on any device: what the link shows is what volunteers get. Nothing has to be set up on a device. */
 function volunteerURL(){ return /#[ms]=/.test(location.hash||''); }
@@ -257,12 +257,12 @@ function upInfo(meet){ return (S.up&&S.up[meet.config.id])||{}; }
 function uploadPending(meet){ const sig=mySig(meet); return !!sig&&sig!==upInfo(meet).sig; }
 function lastActivity(meet){ return myStreams(meet).reduce((m,s) => Math.max(m,s.updatedAt||0), 0); }
 let upBusy=false, upErr=null, upTried=0, upFlash=0;
-/* During a race the phone uploads about every 20 seconds while there is something new; the upload runs in the
+/* During a race the phone uploads about every 10 seconds while there is something new; the upload runs in the
    background and never holds up a tap. Outside a race it uploads as soon as anything changes. */
 function maybeUpload(force){
   const meet=[curMeet()].concat(liveMeets()).find(m => m&&syncUrl(m)&&uploadPending(m)), url=syncUrl(meet);
   if(!meet||!url||upBusy) return;
-  if(!force&&Date.now()-upTried<15000) return;
+  if(!force&&Date.now()-upTried<8000) return;
   if(navigator.onLine===false){ softHeader(); softSync(); return; }
   upBusy=true; upTried=Date.now(); softHeader(); softSync();
   const sig=mySig(meet), id=meet.config.id;
@@ -455,7 +455,7 @@ function sendResults(meet){
     .then(() => { sheetBusy=false; if(typing()) deferRender(); else render(); });
 }
 setInterval(() => { maybeUpload(false); pushSetup(); followTick(false);
-  if((S.ui.tab==='results'||S.ui.tab==='live')&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 20000);
+  if((S.ui.tab==='results'||S.ui.tab==='live')&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 10000);
 window.addEventListener('online', () => { softHeader(); softSync(); maybeUpload(false); pushSetup(); followTick(true); });
 window.addEventListener('offline', () => softHeader());
 
@@ -536,7 +536,7 @@ function render(noGuard){
   }
   wake(false);
   const keep=$('main'), top=keep?keep.scrollTop:0, s=statusPill();
-  const tabs=!meet?[]:[['timer','Timer'],['schools','Schools'],['roster','Roster']].concat(isOwner(meet)?[['live','Live'],['results','Results'],['setup','Setup']]:[]);
+  const tabs=!meet?[]:[['timer','Timer'],['schools','Schools'],['roster','Roster']].concat(isOwner(meet)?[['live','Results'],['results','Review'],['setup','Setup']]:[]);
   app.className='app';
   app.innerHTML='<header class="top"><button class="brand" data-act="tab" data-tab="home"><strong>XC Finish Line</strong><span>'+esc(meet?meet.config.name:'No meet on this device')+(meet?' <i class="code">'+esc(meet.config.id)+'</i>':'')+'</span></button>'+
     '<button class="pill" id="pill" data-act="upload-now"><span class="dot '+s[0]+'"></span>'+esc(s[1])+'</button>'+
@@ -586,7 +586,7 @@ function homeHTML(meet){
   const isToday=todayId()===meet.config.id, owner=isOwner(meet);
   return '<section class="sec"><h2>'+esc(meet.config.name)+(isToday?' <span class="badge">Today\'s meet</span>':'')+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date))+'. ':'')+
     (owner&&sheetUrl()&&!isToday&&todayId()?'This is not the meet marked as today\'s; volunteers\' phones are on the other one. ':'')+
-    (owner?'Setup, Live and Results are in the tabs above. The jobs below are the volunteers\' screens.':'This device is set up for the meet and needs no signal from here on. Pick your job.')+'</p>'+(owner?'':meetPickerHTML(meet))+
+    (owner?'Results, Review and Setup are in the tabs above. Results is the clean list to show runners and coaches; Review is where you check the lists and fix anything. The jobs below are the volunteers\' screens.':'This device is set up for the meet and needs no signal from here on. Pick your job.')+'</p>'+(owner?'':meetPickerHTML(meet))+
     (owner&&sheetUrl()&&!isToday?'<div class="rowf"><button class="btn pri" data-act="set-today" data-m="'+esc(meet.config.id)+'" data-confirm="Tap again: today\'s meet">Make this today\'s meet</button></div>':'')+
     (owner?'':'<div class="rowf">'+deviceNameField()+soundField()+'</div>')+'</section>'+
     (owner?sheetMeetsHTML(meet)+'<section class="sec"><div class="rowf">'+deviceNameField()+soundField()+'</div></section>':'')+
@@ -606,7 +606,7 @@ function liveHTML(meet){
   let h='<section class="sec"><div class="rowf" style="justify-content:space-between;align-items:center"><h2>'+esc(race.name)+'</h2>'+
     (su?'<button class="btn sm" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check now</button>':'')+'</div>'+
     (races.length>1?'<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="live-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>':'')+
-    '<p class="note pullnote">'+esc(su?pullNote()+' Phones upload every 20 seconds or so while they have signal.':'No Sheet connected: this shows what has been scanned or recorded on this device.')+'</p></section>';
+    '<p class="note pullnote">'+esc(su?pullNote()+' Phones upload every 10 seconds or so while they have signal.':'No Sheet connected: this shows what has been scanned or recorded on this device.')+'</p></section>';
   if(!v.n) return h+'<div class="empty"><p>No finishers yet for '+esc(race.name)+'.</p></div>';
   h+='<div class="rtable live'+(named?' named':'')+'"><div class="rhead"><span>Pl</span><span>Time</span><span>School</span>'+(named?'<span>Name</span>':'')+'</div>';
   v.rows.forEach(row => { const sch=row.school?schoolOf(meet,row.school):null;
@@ -617,7 +617,7 @@ function liveHTML(meet){
   const sc=X.teamScores(v.rows.map(r => r.school));
   if(sc.length) h+='<section class="sec"><h3>Team scores so far</h3><div class="tscroll"><table class="grid"><thead><tr><th>Score</th><th>School</th><th>Scoring places</th><th>In</th></tr></thead><tbody>'+
     sc.map(x => { const s=schoolOf(meet,x.s); return '<tr><td class="num">'+(x.score==null?'inc.':x.score)+'</td><td><span class="chip"><u style="background:'+esc(s.color)+'"></u><span>'+esc(s.name)+'</span></span></td><td>'+(x.score==null?'fewer than five':x.places.slice(0,5).join(', '))+'</td><td>'+x.finishers+'</td></tr>'; }).join('')+'</tbody></table></div>'+
-    '<p class="note">Scored as one meet. Corrections made in Results show here too.</p></section>';
+    '<p class="note">Scored as one meet. Corrections made in Review show here too.</p></section>';
   return h;
 }
 
@@ -659,7 +659,7 @@ function setupHTML(meet){
   h+='</div><div class="rowf"><button class="btn" data-act="add-school">Add school</button></div></section>';
 
   const su=syncUrl(meet), raw=String(c.sync||'').trim();
-  h+='<section class="sec"><h2>Google Sheet</h2><p class="note">Optional, and set up once for the season. With it, each phone uploads its taps every 20 seconds or so while it has signal, Live and Results on your device fill in during the race, and this meet\'s setup is kept on the Sheet so any device of yours can open it.</p>'+
+  h+='<section class="sec"><h2>Google Sheet</h2><p class="note">Optional, and set up once for the season. With it, each phone uploads its taps every 10 seconds or so while it has signal, Results on your device fills in during the race, and this meet\'s setup is kept on the Sheet so any device of yours can open it.</p>'+
      '<ol class="steps"><li>Make a Google Sheet. In it, open Extensions, then Apps Script.</li><li>Press Copy the script here, and paste it over everything in the editor. Save.</li>'+
      '<li>Deploy, New deployment, type Web app. Execute as: Me. Who has access: Anyone. Deploy, and approve the permission request.</li>'+
      '<li>Copy the web app link (it ends in /exec) and paste it below. Then send the meet link to volunteers; it carries this setting.</li></ol>'+
@@ -674,7 +674,7 @@ function setupHTML(meet){
   h+='<section class="sec"><h2>Links</h2>'+(su?'<p class="note">One <strong>season link</strong> for volunteers, sent once. It connects their phone to the Sheet and opens today\'s meet, with only Timer, Schools and Roster. The plain address of the app is always this full view; a phone or tablet of yours that has never opened the app can be connected to the Sheet with the second link.</p>'+
      '<div class="rowf"><button class="btn pri" data-act="copy-season">Copy season link for volunteers</button>'+(navigator.share?'<button class="btn" data-act="share-season">Share</button>':'')+'<button class="btn" data-act="show-season-qr">Show as QR code</button></div>'+
      '<div class="rowf"><button class="btn" data-act="copy-season-org">Copy link for your own other devices</button></div>':'')+
-     '<details class="roster"><summary>'+(su?'Backup: links for this meet only (no signal needed)':'Links for this meet')+'</summary><p class="note">A meet link carries this meet\'s setup inside it, so a phone with no signal can still load the meet. The volunteer link shows only Timer, Schools and Roster; the organizer link adds Live, Results and Setup. Send it again after any change.</p>'+
+     '<details class="roster"><summary>'+(su?'Backup: links for this meet only (no signal needed)':'Links for this meet')+'</summary><p class="note">A meet link carries this meet\'s setup inside it, so a phone with no signal can still load the meet. The volunteer link shows only Timer, Schools and Roster; the organizer link adds Results, Review and Setup. Send it again after any change.</p>'+
      '<div class="rowf"><button class="btn" data-act="copy-link">Copy volunteer meet link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
      '<button class="btn" data-act="show-link-qr">Show as QR code</button><button class="btn" data-act="copy-org-link">Copy organizer meet link</button></div></details><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
 
@@ -683,8 +683,8 @@ function setupHTML(meet){
   h+='<section class="sec"><h2>Race day</h2><ol class="steps">'+
      '<li>Before leaving a connection, every volunteer opens the season link (once a season) and then opens the app on race day with signal, and waits for "Works offline" at the top. It shows today\'s meet.</li>'+
      '<li>Timer and Schools stand at the line. Roster stands at the end of the chute and still collects the place cards.</li>'+
-     '<li>Every tap is saved on the phone the moment it happens. With the Sheet connected, phones upload in the background and Live on your device shows the finish list as it grows.</li>'+
-     '<li>Afterward, check Results and send the finished races to the Sheet. Without the Sheet, each volunteer presses Send and you scan the codes before anyone leaves.</li></ol></section>';
+     '<li>Every tap is saved on the phone the moment it happens. With the Sheet connected, phones upload in the background and Results on your device shows the finish list as it grows.</li>'+
+     '<li>Afterward, check Review and send the finished races to the Sheet. Without the Sheet, each volunteer presses Send and you scan the codes before anyone leaves.</li></ol></section>';
 
   h+='<section class="sec"><h3>Remove</h3><p class="note">'+(su?'Removes the meet from the Sheet (setup, uploads and result tabs) and from this device. Today\'s meet cannot be deleted; mark another first.':'Removes the meet from this device.')+'</p><div class="rowf"><button class="btn danger" data-act="del-meet" data-confirm="Tap again to delete this meet"'+(isToday?' disabled':'')+'>Delete this meet</button></div></section>'+versionHTML();
   return h;
@@ -895,7 +895,7 @@ function resultsHTML(meet){
   if(!races.length) return '<div class="empty"><p>Add a race in Setup first.</p></div>';
   let rid=S.ui.resRace; if(!races.some(r => r.id===rid)){ rid=races[0].id; S.ui.resRace=rid; }
   const su=syncUrl(meet);
-  let h='<section class="sec"><h2>Collected</h2><p class="note">Meet code '+esc(meet.config.id)+'. '+(su?'Phones upload to the Sheet every 20 seconds or so while they have signal, and this screen checks it every 20 seconds. For a phone with no signal, scan its code.'
+  let h='<section class="sec"><h2>Collected</h2><p class="note">Meet code '+esc(meet.config.id)+'. '+(su?'Phones upload to the Sheet every 10 seconds or so while they have signal, and this screen checks it every 10 seconds. For a phone with no signal, scan its code.'
       :'Scan each volunteer\'s code after the race. Lists recorded on this device are already here.')+'</p>'+checklistHTML(meet)+
     (su?'<p class="status pullnote">'+esc(pullNote())+'</p>'+phonesHTML(meet)+'<div id="others">'+otherMeetsHTML(meet)+'</div>':'')+
     '<div class="rowf">'+(su?'<button class="btn pri" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check the Sheet now</button>':'')+

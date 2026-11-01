@@ -5,8 +5,8 @@ Finish-line timing for cross country meets, built for three volunteers with phon
 - **Timer** (at the line): START for each race, then one tap per finisher. Two races can run at once; a switch at the top chooses which race the big button belongs to.
 - **Schools** (at the line): one tap per finisher on that runner's school, in finish order.
 - **Roster** (end of the chute): take the place card, tap the school, tap the name. The place follows the cards in order; enter the card number when someone arrives out of order.
-- **Live** (organizer): the finish list and team scores as the phones upload them, for showing coaches at the race.
-- **Results** (organizer): review the merged list, fix what the cross-checks flag, mark DNS/DNF, and send the table to the Google Sheet.
+- **Results** (organizer): the finish list and team scores as the phones upload them, for showing runners and coaches at the race.
+- **Review** (organizer): check the merged lists, fix what the cross-checks flag, mark DNS/DNF, and send the table to the Google Sheet.
 
 No roster, tap or result is ever stored in this repository or sent to a server. GitHub only delivers the app's code.
 
@@ -17,7 +17,7 @@ Connect a Google Sheet once (below). After that:
 1. **Set up each meet in the app's Setup** (schools, rosters if you want names, races). Every change is saved to the Sheet by itself.
 2. Press **Make this today's meet**. That is the whole hand-off.
 3. Volunteers open the **season link** once, in September. Every race day they open the app with signal and it shows today's meet, with only Timer, Schools and Roster. No new links, ever.
-4. The plain address of the app is always the full view: today's meet with Live, Results and Setup, and a home screen that lists every meet on the Sheet: open another one, mark one as today's, or delete one (which removes its setup, uploads and result tabs from the Sheet). A device of yours that has never opened the app needs the Sheet connected once: paste the web app link, or open the "link for your own other devices" from Setup.
+4. The plain address of the app is always the full view: today's meet with Results, Review and Setup, and a home screen that lists every meet on the Sheet: open another one, mark one as today's, or delete one (which removes its setup, uploads and result tabs from the Sheet). A device of yours that has never opened the app needs the Sheet connected once: paste the web app link, or open the "link for your own other devices" from Setup.
 
 The only thing that carries data is the Sheet, so a browser that cleared its storage, or a lost link, costs nothing: open the app, paste the Sheet's web app link, and everything is back.
 
@@ -32,19 +32,19 @@ Per-meet links (Setup, under "Backup") still exist for a phone that has no signa
 
 ## Race day
 
-1. Every tap is saved on the phone the moment it happens. With the Sheet connected it also uploads in the background every 20 seconds or so.
+1. Every tap is saved on the phone the moment it happens. With the Sheet connected it also uploads in the background every 10 seconds or so.
 2. Keep the phone awake and the app in front. Guided Access (iOS) or app pinning (Android) stops stray swipes.
-3. After the race, Results on your device lists each phone and when it last uploaded, so nobody leaves with data still on their phone. Without the Sheet, each volunteer holds **Exit**, presses **Send**, and shows the code; you press **Scan a code** in Results.
+3. After the race, Review on your device lists each phone and when it last uploaded, so nobody leaves with data still on their phone. Without the Sheet, each volunteer holds **Exit**, presses **Send**, and shows the code; you press **Scan a code** in Review.
 4. If a camera will not cooperate, **Copy as text** on the volunteer's phone and **Paste a code** on yours does the same job.
 
 ## Google Sheet (optional, strongly recommended)
 
 With a Sheet connected, nobody has to hand anything over and you can watch the race come in:
 
-- Each phone uploads its tap lists about every 20 seconds while it has signal. Taps are always saved on the phone first; the upload runs in the background and never holds up a tap. The line under the buttons says what is on the phone and when the Sheet last got it.
-- **Live** on the organizer's device shows each race's finish list (Place, Time, School, and Name once the Roster station is used) and team scores so far, refreshed every 20 seconds.
+- Each phone uploads its tap lists about every 10 seconds while it has signal. Taps are always saved on the phone first; the upload runs in the background and never holds up a tap. The line under the buttons says what is on the phone and when the Sheet last got it.
+- **Results** on the organizer's device shows each race's finish list (Place, Time, School, and Name once the Roster station is used) and team scores so far, refreshed every 10 seconds.
 - Each meet's setup is saved on the Sheet as you edit it, and one meet is marked as today's. Volunteers' phones follow today's meet (on opening the app, when signal returns, when leaving a race screen, and every few minutes); a phone in the middle of a job is never switched. Organizer devices follow it too, unless you deliberately opened another meet.
-- Results warns when phones are uploading to a different copy of the meet than the one open, and can switch to it.
+- Review warns when phones are uploading to a different copy of the meet than the one open, and can switch to it.
 - The QR codes remain as the backup for a phone with no signal.
 
 One-time setup, on a computer:
@@ -57,7 +57,7 @@ One-time setup, on a computer:
 
 When the script changes (the app says "older script"), paste the new one over the old and publish it with **Deploy > Manage deployments > Edit > Version: New version > Deploy**. The link stays the same.
 
-Results can **Send results to the Sheet**, which writes each race to its own tab. The `XC uploads` tab holds the raw lists from each phone and each meet's setup, and can be left alone.
+Review can **Send results to the Sheet**, which writes each race to its own tab. The `XC uploads` tab holds the raw lists from each phone and each meet's setup, and can be left alone.
 
 ## How the lists are checked
 
