@@ -237,11 +237,11 @@ table.grid td.win{color:var(--ok)} table.grid td.win .chip span{font-weight:700}
 .runs input{width:18px;height:18px;margin:0}
 /* the Roster tab: enter places from the cards */
 .ptable{border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
-.prow{display:grid;grid-template-columns:minmax(0,1.4fr) 4.4rem minmax(0,1.3fr) auto;gap:8px;align-items:center;padding:4px 10px;border-top:1px solid var(--line);min-height:46px}
+.prow{display:grid;grid-template-columns:minmax(0,1.3fr) 4.2rem minmax(0,1.2fr) auto;gap:8px;align-items:center;padding:4px 10px;border-top:1px solid var(--line);min-height:46px}
 .prow:first-child{border-top:0}
 .pname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .pbox{min-height:40px;padding:6px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
-.pfb{font-size:.86rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pfb{font-size:.86rem;color:var(--muted);line-height:1.2}
 .pfb b{color:var(--ink);font-variant-numeric:tabular-nums}
 .pdnf{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 9px;font-size:.8rem;font-weight:600;color:var(--muted);min-height:32px}
 .pdnf.on{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}

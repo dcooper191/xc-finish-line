@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.5';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-01.7';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -396,7 +396,7 @@ function sheetMeetsHTML(meet){
         (isToday||!m.setup?'':'<button data-act="set-today" data-m="'+esc(m.meet)+'" data-confirm="Tap again: today\'s meet">Make today\'s meet</button>')+
         (isToday?'':'<button class="danger" data-act="del-sheet-meet" data-m="'+esc(m.meet)+'" data-confirm="Tap again to delete">Delete</button>')+'</div></div>'; }).join('')+'</div>';
   }
-  return h+'<div class="rowf"><button class="btn" data-act="list-sheet">Check the Sheet</button><button class="btn" data-act="new-meet">New meet</button></div></section>';
+  return h+'<div class="rowf"><button class="btn" data-act="list-sheet">Check the Sheet</button><button class="btn" data-act="new-meet">New meet</button><button class="btn" data-act="sample-meet">Load a sample meet</button></div></section>';
 }
 function openSheetMeet(id){
   const m=listInfo&&listInfo.meets.find(x => x.meet===id); if(!m||!m.setup){ toast('That meet has no setup on the Sheet'); return; }
@@ -577,7 +577,7 @@ function noMeetHTML(){
     (su?'':'<label class="field"><span>Link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste the link"></textarea></label><div class="rowf"><button class="btn pri" data-act="import-link">Open</button></div>')+'</section>'+versionHTML();
   return '<section class="sec"><h2>'+(su?'No meet marked as today\'s':'Connect your Sheet')+'</h2><p class="note">'+(su?'The Sheet is connected. Mark a meet below as today\'s, or make a new one.':'Paste your Sheet\'s web app link once (it ends in /exec; find it in Apps Script under Deploy, Manage deployments). Every meet on the Sheet is then available here. Or create a meet without a Sheet.')+'</p>'+
     (su?'':'<label class="field"><span>Web app link</span><input type="text" id="sheeturl" data-bind="sheet-url" value="'+esc(S.sheet||'')+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
-    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div>')+'</section>'+
+    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button><button class="btn" data-act="sample-meet">Load a sample meet</button></div>')+'</section>'+
     (su?sheetMeetsHTML(null):'')+versionHTML();
 }
 function versionHTML(){
@@ -797,7 +797,7 @@ function rosterHTML(meet){
   const race=raceOf(meet,rid), v=view(meet,rid), placeOf={};
   v.rows.forEach(row => { if(row.runner&&!row.runner.unknown) placeOf[row.runner.id]=row; });
   const runners=meet.config.runners.filter(u => u.r===rid), placed=runners.filter(u => placeOf[u.id]).length;
-  let h='<section class="sec"><h2>Roster</h2><p class="note">After the race: enter each runner\'s place from the cards the coaches hand in. The time fills in from the Timer, and the school tapped at the line at that place is checked against the runner\'s. Runners left blank are exported as DNS unless marked DNF.</p>'+
+  let h='<section class="sec"><h2>Roster</h2><p class="note">After the race: enter each runner\'s place from the cards the coaches hand in. The time fills in from the Timer; &#10003; means the school tapped at the line at that place is the runner\'s, &ne; means it was another school. Runners left blank are exported as DNS unless marked DNF.</p>'+
     (races.length>1?'<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="res-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>':'')+
     '<p class="status">'+esc(race.name)+': '+placed+' of '+runners.length+' placed, '+v.n+' finishers timed.</p></section>';
   if(!runners.length) return h+'<div class="empty"><p>No roster for '+esc(race.name)+' yet. Paste the rosters in Setup, or add names in Review.</p></div>';
@@ -806,8 +806,8 @@ function rosterHTML(meet){
     h+='<section class="sec"><h3>'+chipHTML(meet,sch.id)+'</h3><div class="ptable">';
     list.forEach(u => { const row=placeOf[u.id], st=(v.r.status||{})[u.id]||'';
       let fb='';
-      if(row){ fb=(row.time!=null?'<b>'+fmtTime(row.time+v.adj)+'</b>':'<span class="none">no time at this place</span>')+(row.tapS?(row.tapS===u.s?' <span class="okword">school matches</span>':' <span class="warnline">tapped as '+esc((schoolOf(meet,row.tapS)||{}).name||'?')+'</span>'):'');
-        if(row.dup) fb+=' <span class="warnline">place used twice</span>'; }
+      if(row){ fb=(row.time!=null?'<b>'+fmtTime(row.time+v.adj)+'</b>':'<span class="none">no time</span>')+(row.tapS?(row.tapS===u.s?' <span class="okword">&#10003;</span>':' <span class="warnline">&ne; tapped '+esc((schoolOf(meet,row.tapS)||{}).name||'?')+'</span>'):'');
+        if(row.dup) fb+=' <span class="warnline">used twice</span>'; }
       h+='<div class="prow"><span class="pname">'+esc(u.n)+'</span><input type="number" inputmode="numeric" min="1" class="pbox" data-bind="place" data-u="'+esc(u.id)+'" value="'+(row?row.i+1:'')+'" placeholder="#" aria-label="Place">'+
         '<span class="pfb">'+fb+'</span><button class="pdnf'+(st==='DNF'?' on':'')+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+(st==='DNF'?'DNS':'DNF')+'"'+(row?' hidden':'')+'>DNF</button></div>'; });
     h+='</div></section>';
@@ -980,6 +980,7 @@ function checklistHTML(meet){
   meet.config.races.forEach(r => {
     h+='<tr><td><strong>'+esc(r.name)+'</strong></td>'+['timer','school','roster'].map(k => { const st=pickStream(meet,r.id,k,(resultOf(meet,r.id)||{})['src'+k.charAt(0).toUpperCase()+k.slice(1)]);
       const others=raceStreams(meet,r.id,k).filter(x => entryCount(x)>0).length-1;
+      if(k==='roster'&&!st){ const typed=Object.values((resultOf(meet,r.id)||{}).names||{}).filter(x => x&&(x.u||x.n)).length; return '<td>'+(typed?typed+'<div class="status">entered in Roster</div>':'<span class="status">none yet</span>')+'</td>'; }
       return st?'<td>'+entryCount(st)+'<div class="status">'+esc(st.deviceId===S.deviceId?'this device':(st.deviceName||'a device'))+(others>0?' <span class="warnline">+'+others+' more, see Corrections</span>':'')+'</div></td>':'<td class="miss">missing</td>'; }).join('')+'</tr>';
   });
   return h+'</tbody></table></div>';
@@ -994,7 +995,7 @@ function resultsHTML(meet){
     (su?'<p class="status pullnote">'+esc(pullNote())+'</p>'+phonesHTML(meet)+'<div id="others">'+otherMeetsHTML(meet)+'</div>':'')+
     '<div class="rowf">'+(su?'<button class="btn pri" data-act="pull-sheet"'+(pullBusy?' disabled':'')+'>Check the Sheet now</button>':'')+
     '<button class="btn'+(su?'':' pri')+'" data-act="scan">Scan a code</button><button class="btn" data-act="paste-open">Paste a code</button></div></section>';
-  const race=raceOf(meet,rid), v=view(meet,rid), nT=v.times.length, nS=v.schools.length, nR=v.R?v.R.picks.length:0, fin=v.r.finishers;
+  const race=raceOf(meet,rid), v=view(meet,rid), nT=v.times.length, nS=v.schools.length, nR=v.rows.filter(r => r.name).length, fin=v.r.finishers;
   h+='<section class="sec">';
   if(races.length>1) h+='<div class="seg">'+races.map(r => '<button aria-pressed="'+(r.id===rid)+'" data-act="res-race" data-race="'+esc(r.id)+'">'+esc(r.name)+'</button>').join('')+'</div>';
   h+='<h2>'+esc(race.name)+'</h2>';
@@ -1204,6 +1205,31 @@ function scanFromFile(file){
   img.src=url;
 }
 
+/* A sample meet with invented runners and a finished boys race, to click through. It stays on this device. */
+function sampleMeet(){
+  const id='m'+rid(6), sIds=['s1','s2','s3','s4'].map(() => 's'+rid(3)), hosts=['Berkshire','Millbrook','Gunn','Salisbury'];
+  const rosters=[['Jack Stone','Sam Wang','William Liu','Harry Ol'],['Will Vollmer','Vincent He','Charlie Maier','Ollie Fauver','Zane Williams','Patrick Xu'],
+    ['Nickolas Mannello','Anders Hildebrand','Tommy Hagymasi','Louis Valentino','August Dong','Lucas Chen','Tyler Choi'],['Eli Myers','Jack Solon','Wyatt Orthwein','Sam Schneider','Jo Kaijima','Marcus Mann']];
+  const girls=[['Ann Abel','Bea Baker','Cat Cole'],['Gia North','Hana North','Ivy North'],[],['Dee Fox','Eve Gray','Fay Hill','Ida Jones','Kay Lee']];
+  const cfg={id, name:'Sample meet (delete me)', date:today(), ver:Date.now(), deleted:false, counter:0, sync:'', scoring:'dual',
+    schools:hosts.map((n,i) => ({id:sIds[i], name:n, color:PRESETS[i][1], races:i===2?['b']:undefined})), races:[{id:'g',name:'Girls'},{id:'b',name:'Boys'}], runners:[]};
+  let k=0; rosters.forEach((list,i) => list.forEach(n => cfg.runners.push({id:String(k++), n, s:sIds[i], r:'b'}))); girls.forEach((list,i) => list.forEach(n => cfg.runners.push({id:String(k++), n, s:sIds[i], r:'g'})));
+  cfg.counter=k;
+  const order=[[1,1095.6],[2,1113.1],[2,1153.9],[2,1160.9],[2,1177.8],[2,1187.7],[0,1192.7],[1,1197.3],[1,1198.2],[1,1200.8],[1,1208.9],[3,1211.0],[3,1219.9],[2,1233.3],[2,1251.2],[3,1252.6],[3,1261.3],[3,1271.8],[0,1311.6],[1,1314.5],[3,1319.8],[3,1337.6],[0,1459.3],[0,1550.0]];
+  const t0=Date.now()-3600000, streams={};
+  streams['b.timer.dsample1']={id:'b.timer.dsample1', raceId:'b', kind:'timer', deviceId:'dsample1', deviceName:'Sample timer', updatedAt:Date.now(), startedAt:t0, endedAt:t0+1600000, taps:order.map(o => t0+Math.round(o[1]*1000))};
+  streams['b.school.dsample2']={id:'b.school.dsample2', raceId:'b', kind:'school', deviceId:'dsample2', deviceName:'Sample schools', updatedAt:Date.now(), taps:order.map(o => ({t:t0+Math.round(o[1]*1000)+400, s:sIds[o[0]]}))};
+  /* the girls race: times only, with one school tap missed at place 4 so the check has something to show */
+  const go=[[0,1102.3],[1,1140.0],[3,1151.2],[0,1163.9],[1,1170.4],[3,1184.0],[0,1199.5],[3,1210.7],[1,1231.0],[3,1266.2],[3,1290.9]];
+  streams['g.timer.dsample1']={id:'g.timer.dsample1', raceId:'g', kind:'timer', deviceId:'dsample1', deviceName:'Sample timer', updatedAt:Date.now(), startedAt:t0+300000, endedAt:t0+1700000, taps:go.map(o => t0+300000+Math.round(o[1]*1000))};
+  streams['g.school.dsample2']={id:'g.school.dsample2', raceId:'g', kind:'school', deviceId:'dsample2', deviceName:'Sample schools', updatedAt:Date.now(), taps:go.filter((o,i) => i!==3).map(o => ({t:t0+300000+Math.round(o[1]*1000)+400, s:sIds[o[0]]}))};
+  const names={}; [[0,'Will Vollmer'],[1,'Nickolas Mannello'],[2,'Anders Hildebrand'],[3,'Tommy Hagymasi'],[4,'Louis Valentino'],[5,'August Dong'],[6,'Jack Stone'],[7,'Vincent He'],[8,'Charlie Maier'],[9,'Ollie Fauver'],[10,'Zane Williams'],[11,'Eli Myers'],[12,'Jack Solon'],[13,'Lucas Chen'],[14,'Tyler Choi'],[15,'Wyatt Orthwein'],[16,'Sam Schneider'],[17,'Jo Kaijima'],[18,'Sam Wang'],[19,'Patrick Xu'],[20,'Marcus Mann'],[22,'William Liu']]
+    .forEach(x => { const u=cfg.runners.find(r => r.n===x[1]&&r.r==='b'); if(u) names[x[0]+1]={u:u.id}; });
+  S.meets[id]={config:cfg, streams, results:{b:{raceId:'b', names, status:{}, startAdj:0, finishers:24, cols:null, srcTimer:null, srcSchool:null, srcRoster:null, updatedAt:Date.now()}}, own:true};
+  S.meetId=id; S.chosen={meet:id, today:todayId()};
+  Object.assign(S.ui,{tab:'live', resRace:'b', liveRace:'b', livePicked:true, openRow:null, lock:null, rosterSchool:null}); save(); render();
+  toast('Sample meet loaded. It is only on this device; delete it from Setup when you are done.');
+}
 /* ---------- actions ---------- */
 function newMeet(){
   const prev=curMeet(), id='m'+rid(6);
@@ -1252,6 +1278,7 @@ function act(name,el){
     case 'copy-send': copyText(X.makeFrames(ov.code,1e9)[0], 'Copied. Send it to the organizer.', 'sendout'); break;
     case 'share-send': navigator.share({text:X.makeFrames(ov.code,1e9)[0]}).catch(shareFail); break;
     case 'new-meet': newMeet(); break;
+    case 'sample-meet': sampleMeet(); break;
     case 'del-meet': deleteMeet(meet.config.id); break;
     case 'del-sheet-meet': deleteMeet(d.m); break;
     case 'set-today': setToday(d.m); break;
