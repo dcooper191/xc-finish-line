@@ -675,8 +675,7 @@ function qrPosterDoc(link, meet){
   return '<!doctype html><html><head><meta charset="utf-8"><title>Results link</title><style>'+css+'</style></head><body><div class="card">'+
     '<p class="kick">Cross Country</p><h1>Live Results</h1><p class="sub">'+esc(name)+(date?' · '+esc(date):'')+'</p>'+
     '<img class="qr" src="'+img+'" alt="QR code">'+
-    '<p class="how">Finish list and team scores as runners come in</p>'+
-    '<p class="url">'+esc(link)+'</p></div></body></html>';
+    '<p class="how">Finish list and team scores as runners come in</p></div></body></html>';
 }
 function saveFile(fname, text, type){
   let file=null; try{ file=new File([text],fname,{type}); }catch(e){}
