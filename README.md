@@ -10,14 +10,25 @@ Finish-line timing for cross country meets, built for three volunteers with phon
 
 No roster, tap or result is ever stored in this repository or sent to a server. GitHub only delivers the app's code.
 
-## Before the meet
+## The simple way: one Sheet, one season link
 
-1. Open the app, go to **Setup**, create the meet, add the schools and paste each roster (one runner per line, per race). Names can arrive as one cell or two, last name first or first name first; a setting above the rosters says which. They are stored and shown first name first and sorted by last name. If a roster was entered the wrong way round, **Swap first and last** fixes it in place.
-2. Press **Copy volunteer link** and text it to the volunteers. The link contains the rosters, so send it only to them. Send it again if you change anything.
-   - The volunteer link always shows only Timer, Schools and Roster, on any device, including yours. Live, Results and Setup appear on the device that created the meet when the app is opened at its plain address, on any device you open the **organizer link** on, and on any device that opens the meet from the Sheet. Every link carries the meet's code (shown in the header), so copies of a meet can be told apart.
-3. Each volunteer opens the link once while they have a connection and waits for **Works offline** at the top. Adding it to the home screen is optional and gives a full-screen view.
-   - Open the link in Safari or Chrome itself, not inside a mail or chat app's built-in browser.
-   - Home screen on an iPhone or iPad: add it from the meet link, so the installed app starts with the meet loaded.
+Connect a Google Sheet once (below). After that:
+
+1. **Set up each meet in the app's Setup** (schools, rosters if you want names, races). Every change is saved to the Sheet by itself.
+2. Press **Make this today's meet**. That is the whole hand-off.
+3. Volunteers open the **season link** once, in September. Every race day they open the app with signal and it shows today's meet, with only Timer, Schools and Roster. No new links, ever.
+4. Your own phone or tablet opens the **organizer season link** once. The plain address then opens today's meet with Live, Results and Setup, and the home screen lists every meet on the Sheet: open another one, mark one as today's, or delete one (which removes its setup, uploads and result tabs from the Sheet).
+
+The only thing that carries data is the Sheet, so a browser that cleared its storage, or a lost link, costs nothing: open the app, paste the Sheet's web app link, and everything is back.
+
+Per-meet links (Setup, under "Backup") still exist for a phone that has no signal at the course and never opened the meet.
+
+## Without a Sheet
+
+1. Open the app, go to **Setup**, create the meet, add the schools and paste each roster (one runner per line, per race). Names can arrive as one cell or two, last name first or first name first; a setting above the rosters says which. They are stored and shown first name first and sorted by last name.
+2. Press **Copy volunteer meet link** and text it to the volunteers. The link contains the rosters, so send it only to them. Send it again if you change anything.
+   - The volunteer link always shows only Timer, Schools and Roster, on any device, including yours. Live, Results and Setup appear on the device that created the meet when the app is opened at its plain address, and on any device you open the **organizer meet link** on. Every link carries the meet's code (shown in the header), so copies of a meet can be told apart.
+3. Each volunteer opens the link once while they have a connection and waits for **Works offline** at the top.
 
 ## Race day
 
@@ -32,7 +43,7 @@ With a Sheet connected, nobody has to hand anything over and you can watch the r
 
 - Each phone uploads its tap lists about every 20 seconds while it has signal. Taps are always saved on the phone first; the upload runs in the background and never holds up a tap. The line under the buttons says what is on the phone and when the Sheet last got it.
 - **Live** on the organizer's device shows each race's finish list (Place, Time, School, and Name once the Roster station is used) and team scores so far, refreshed every 20 seconds.
-- Each meet's setup is saved on the Sheet as you edit it. Any device with the Sheet's link can list the meets on it and open one as organizer (home screen, "Meets on the Sheet"), so a lost link or a browser that cleared its storage is not a problem. Phones that already have the meet pick up roster changes by themselves.
+- Each meet's setup is saved on the Sheet as you edit it, and one meet is marked as today's. Volunteers' phones follow today's meet (on opening the app, when signal returns, when leaving a race screen, and every few minutes); a phone in the middle of a job is never switched. Organizer devices follow it too, unless you deliberately opened another meet.
 - Results warns when phones are uploading to a different copy of the meet than the one open, and can switch to it.
 - The QR codes remain as the backup for a phone with no signal.
 

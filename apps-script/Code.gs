@@ -1,9 +1,8 @@
 /**
- * XC Finish Line: Google Sheet side (script version 2).
+ * XC Finish Line: Google Sheet side (script version 3).
  *
- * Collects each volunteer's tap list as their phone uploads it (during the race, every 20 seconds or so),
- * keeps a copy of each meet's setup, hands all of that to the organizer's device, and receives the finished
- * results as ordinary sheet tabs.
+ * The Sheet is the home of everything: each meet's setup, which meet is today's meet (volunteers' phones follow
+ * it), each phone's tap list as it uploads during the race, and the finished results as ordinary sheet tabs.
  *
  * Install: in the Google Sheet choose Extensions > Apps Script, replace everything with this file, save.
  * Then Deploy > New deployment > type "Web app" > Execute as "Me" > Who has access "Anyone" > Deploy,
@@ -11,7 +10,7 @@
  * Updating a script that is already deployed: Deploy > Manage deployments > Edit > Version: New version > Deploy.
  * The link stays the same.
  */
-var SCRIPT_VERSION = 2;
+var SCRIPT_VERSION = 3;
 var UPLOADS = 'XC uploads';
 var SETUP = 'setup';   /* the "device" that holds a meet's setup (schools, rosters, races) */
 var HEADER = ['Meet', 'Device id', 'Device', 'Received (ms)', 'Received', 'Contents', 'Code'];
@@ -43,7 +42,7 @@ function doGet(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (p.ping) return reply_({ok: true, v: SCRIPT_VERSION, sheet: ss.getName(), url: ss.getUrl()});
     var rows = uploadsSheet_().getDataRange().getValues();
-    if (p.list) return reply_({ok: true, v: SCRIPT_VERSION, meets: listMeets_(rows)});
+    if (p.list) return reply_({ok: true, v: SCRIPT_VERSION, today: today_(), meets: listMeets_(rows)});
     if (!p.meet) return reply_({ok: false, error: 'No meet given'});
     var list = [];
     for (var i = 1; i < rows.length; i++) {
@@ -55,6 +54,8 @@ function doGet(e) {
     return reply_({ok: false, error: String(err)});
   }
 }
+
+function today_() { return PropertiesService.getScriptProperties().getProperty('today') || ''; }
 
 /** Every meet on the Sheet: its setup (if the organizer's device saved one) and which phones have uploaded. */
 function listMeets_(rows) {
@@ -80,6 +81,8 @@ function doPost(e) {
     if (d.t === 'ping') return reply_({ok: true, v: SCRIPT_VERSION});
     if (d.t === 'up') return reply_(saveUpload_(d));
     if (d.t === 'results') return reply_(saveResults_(d));
+    if (d.t === 'today') { PropertiesService.getScriptProperties().setProperty('today', String(d.meet || '')); return reply_({ok: true, v: SCRIPT_VERSION, today: today_()}); }
+    if (d.t === 'delete') return reply_(deleteMeet_(d));
     return reply_({ok: false, error: 'Unknown request'});
   } catch (err) {
     return reply_({ok: false, error: String(err)});
@@ -103,6 +106,26 @@ function saveUpload_(d) {
   }
   sh.appendRow(row);
   return {ok: true, v: SCRIPT_VERSION, replaced: false, at: now.getTime()};
+}
+
+/** Removes a meet: its setup, every phone's uploads, and the result tabs the app named. Today's meet is protected. */
+function deleteMeet_(d) {
+  if (!d.meet) return {ok: false, error: 'No meet given'};
+  if (String(d.meet) === today_()) return {ok: false, error: 'That is today\'s meet. Mark another meet as today\'s first.'};
+  var sh = uploadsSheet_();
+  var rows = sh.getDataRange().getValues();
+  var removed = 0;
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][0]) === String(d.meet)) { sh.deleteRow(i + 1); removed++; }
+  }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var tabs = d.tabs || [], gone = [];
+  for (var t = 0; t < tabs.length; t++) {
+    var title = String(tabs[t]).replace(/[\[\]\*\?:\/\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90);
+    var old = title && ss.getSheetByName(title);
+    if (old && ss.getSheets().length > 1) { ss.deleteSheet(old); gone.push(title); }
+  }
+  return {ok: true, v: SCRIPT_VERSION, rows: removed, tabs: gone};
 }
 
 /** Each race becomes its own tab: Place, School, Name, Time. Sending again replaces the tab's contents. */

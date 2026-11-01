@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-10-31.1';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-10-31.2';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -43,7 +43,7 @@ function adoptStored(str){
   if(!str||str===lastJSON) return false;
   let n=null; try{ n=JSON.parse(str); }catch(e){ return false; }
   if(!n||n.v!==2) return false;
-  S.meets=n.meets||{}; S.meetId=n.meetId; S.deviceId=n.deviceId; S.deviceName=n.deviceName; S.sound=n.sound; S.up=n.up||{}; S.sheet=n.sheet||S.sheet; S.setupUp=n.setupUp||{}; lastJSON=str;
+  S.meets=n.meets||{}; S.meetId=n.meetId; S.deviceId=n.deviceId; S.deviceName=n.deviceName; S.sound=n.sound; S.up=n.up||{}; S.sheet=n.sheet||S.sheet; S.setupUp=n.setupUp||{}; S.org=n.org||S.org; S.chosen=n.chosen||null; lastJSON=str;
   return true;
 }
 
@@ -52,7 +52,8 @@ function curMeet(){ const m=S.meets[S.meetId]; return (m&&!m.config.deleted)?m:n
    The volunteer link ALWAYS gives the volunteer view, on any device, the organizer's included: what the link shows
    is what volunteers get. The organizer view needs a device that created the meet or opened the organizer link,
    and a page that was not opened from the volunteer link. */
-function volunteerURL(){ return /#m=/.test(location.hash||''); }
+function volunteerURL(){ return /#[ms]=/.test(location.hash||''); }
+function todayId(){ return (listInfo&&!listInfo.err&&listInfo.today)||''; }
 function isOwner(meet){ return !!(meet&&meet.own)&&!volunteerURL(); }
 function liveMeets(){ return Object.values(S.meets).filter(m => !m.config.deleted)
   .sort((a,b) => (b.config.date||'').localeCompare(a.config.date||'')||(b.config.ver||0)-(a.config.ver||0)); }
@@ -144,9 +145,26 @@ function toDelimited(meet,raceIds,sep){
 }
 
 /* ---------- moving data between devices ---------- */
-/* #m= is the volunteer link; #o= is the organizer's own link and turns on Setup and Results */
-const LINK_RE=/#([mo])=([A-Za-z0-9_-]+)/;
+/* Season links carry the Sheet: #s= for volunteers, #a= for the organizer's own devices. The Sheet then says which
+   meet is today's. The older per-meet links (#m= volunteer, #o= organizer) still work as a no-signal backup. */
+const LINK_RE=/#([moas])=([A-Za-z0-9_.~-]+)/;
 function meetLinkFor(code, owner){ return location.href.split('#')[0]+(owner?'#o=':'#m=')+code; }
+function sheetKey(url){
+  const m=/^https:\/\/script\.google\.com\/(?:a\/macros\/([^\/\s]+)\/|)macros\/s\/([A-Za-z0-9_-]+)\/exec$/.exec(url||''); if(!m) return '';
+  return m[1]?'d~'+m[1]+'~'+m[2]:m[2];
+}
+function urlFromKey(key){
+  const m=/^(?:d~([^~]+)~)?([A-Za-z0-9_-]+)$/.exec(key||''); if(!m) return '';
+  return 'https://script.google.com/'+(m[1]?'a/macros/'+m[1]+'/':'')+'macros/s/'+m[2]+'/exec';
+}
+function seasonLink(owner){ const k=sheetKey(sheetUrl()); return k?location.href.split('#')[0]+(owner?'#a=':'#s=')+k:''; }
+/* Any link from this app: a season link connects the device to the Sheet and follows today's meet; a meet link loads that meet. */
+function importLink(kind, code, boot){
+  if(kind==='m'||kind==='o') return importCode(code, boot, kind==='o');
+  const url=urlFromKey(code); if(!syncUrl({config:{sync:url}})) return Promise.resolve({ok:false, msg:'That season link is not complete. Ask for it again.'});
+  S.sheet=url; if(kind==='a') S.org=true; save();
+  return followToday(true, true).then(r => { if(r.ok&&kind==='a'&&!/organizer/.test(r.msg)) r.msg+='. This device is an organizer\'s.'; return r; });
+}
 function importConfig(cfg, boot, owner){
   if(!cfg) return {ok:false, msg:'That is not a meet link from this app.'};
   const local=S.meets[cfg.id], cur=curMeet(), isNew=!local||!!local.config.deleted; let msg, quiet=false;
@@ -194,7 +212,7 @@ function importCode(code, boot, owner){
 function importIncoming(text){
   text=String(text||'').trim();
   const link=LINK_RE.exec(text);
-  if(link) return importCode(link[2], false, link[1]==='o');
+  if(link) return importLink(link[1], link[2], false);
   /* several volunteers' codes can be pasted together: collect each one separately */
   const asms={}, order=[];
   text.split(/\s+/).forEach(tok => { const f=X.parseFrame(tok); if(!f) return; const key=f.msg+'/'+f.n;
@@ -206,7 +224,8 @@ function importIncoming(text){
     return chain.then(() => ({ok:results.every(r => r.ok), msg:results.map(r => r.msg).join(' ')}));
   }
   if(/^[zp][A-Za-z0-9_-]{8,}$/.test(text)) return importCode(text);
-  return Promise.resolve({ok:false, msg:'That text is not a meet link or a code from this app.'});
+  if(syncUrl({config:{sync:text}})){ S.sheet=text; save(); return followToday(true, true); }
+  return Promise.resolve({ok:false, msg:'That text is not a link or a code from this app.'});
 }
 function sendPayload(meet){
   const mine=myStreams(meet).filter(hasData);
@@ -242,8 +261,8 @@ let upBusy=false, upErr=null, upTried=0, upFlash=0;
 /* During a race the phone uploads about every 20 seconds while there is something new; the upload runs in the
    background and never holds up a tap. Outside a race it uploads as soon as anything changes. */
 function maybeUpload(force){
-  const meet=curMeet(), url=syncUrl(meet);
-  if(!meet||!url||upBusy||!uploadPending(meet)) return;
+  const meet=[curMeet()].concat(liveMeets()).find(m => m&&syncUrl(m)&&uploadPending(m)), url=syncUrl(meet);
+  if(!meet||!url||upBusy) return;
   if(!force&&Date.now()-upTried<15000) return;
   if(navigator.onLine===false){ softHeader(); softSync(); return; }
   upBusy=true; upTried=Date.now(); softHeader(); softSync();
@@ -285,7 +304,7 @@ function pushSetup(){
   const ver=meet.config.ver, id=meet.config.id, url=syncUrl(meet);
   setupBusy=true;
   meetCode(meet).then(code => postSheet(url, {t:'up', meet:id, device:'setup', name:meet.config.name, summary:setupSummary(meet.config), code}))
-    .then(res => { if(res&&res.ok){ (S.setupUp=S.setupUp||{})[id]=ver; save(); } }, () => {})
+    .then(res => { if(res&&res.ok){ (S.setupUp=S.setupUp||{})[id]=ver; save(); if(listInfo) listInfo.at=0; } }, () => {})
     .then(() => { setupBusy=false; const el=$('setupnote'); if(el) el.textContent=setupNote(curMeet()); });
 }
 function setupNote(meet){
@@ -293,19 +312,57 @@ function setupNote(meet){
   if(setupBusy) return 'Saving the setup to the Sheet.';
   return setupPending(meet)?(navigator.onLine===false?'The setup will be saved to the Sheet when this device has signal.':'Setup not yet saved to the Sheet.'):'Setup saved to the Sheet. Phones that have the meet pick up changes by themselves.';
 }
-/* A volunteer phone asks the Sheet for the latest setup now and then, so a roster fixed on the organizer's computer
-   reaches the phone without a new link. */
-let setupPullAt=0;
-function pullSetup(force){
-  const meet=curMeet(), url=syncUrl(meet);
-  if(!meet||!url||isOwner(meet)||S.ui.lock||navigator.onLine===false) return;
-  if(!force&&Date.now()-setupPullAt<300000) return;
-  setupPullAt=Date.now();
-  fetchJSON(url+'?meet='+encodeURIComponent(meet.config.id)).then(res => {
-    const row=((res&&res.uploads)||[]).find(u => u.device==='setup'&&u.code); if(!row) return;
-    const before=meet.config.ver;
-    return importCode(row.code).then(r => { if(r.ok&&curMeet()&&curMeet().config.ver!==before){ toast('Meet updated from the Sheet: '+curMeet().config.name); if(!S.ui.lock&&!ov&&!typing()) render(); } });
-  }).catch(() => {});
+/* Today's meet, as marked on the Sheet. A volunteer phone switches to it whenever it checks (opening the app, signal
+   coming back, leaving a race screen, every few minutes). An organizer device opens it too, unless the organizer
+   chose another meet since today's was set. Nothing on the phone is thrown away: every meet it has stays stored. */
+function followToday(force, announce){
+  const meet=curMeet();
+  if(!sheetUrl()) return Promise.resolve({ok:false, msg:'No Sheet on this device yet'});
+  if(navigator.onLine===false) return Promise.resolve({ok:!!meet, quiet:!announce, msg:meet?'No signal: using '+meet.config.name+' from last time':'No signal, and no meet on this device yet. Try again with signal.'});
+  return listSheet(force).then(li => {
+    if(!li) return {ok:!!meet, quiet:true, msg:''};
+    if(li.err) return {ok:!!meet, quiet:!announce, msg:li.err==='oldscript'?'The Sheet runs an older script. Update it from Setup.':'Could not reach the Sheet: '+li.err};
+    const today=li.today, m=today&&li.meets.find(x => x.meet===today);
+    if(!m||!m.setup) return {ok:!!meet, quiet:!announce, msg:'No meet is marked as today\'s on the Sheet yet.'+(meet?' Staying on '+meet.config.name+'.':'')};
+    const own=!!S.org, cur=curMeet();
+    if(cur&&cur.config.id!==today&&S.ui.lock) return {ok:true, quiet:!announce, msg:'Today\'s meet is '+m.name+'. Exit the current job and it will switch.'};
+    if(cur&&cur.config.id!==today&&own&&S.chosen&&S.chosen.meet===cur.config.id&&S.chosen.today===today) return {ok:true, quiet:true, msg:''};   /* organizer picked this one on purpose */
+    const before=cur?cur.config.id+':'+cur.config.ver:'';
+    return importCode(m.setup, false, own).then(r => {
+      if(!r.ok) return r;
+      if(S.meetId!==today){ S.meetId=today; Object.assign(S.ui,{lock:null, tab:(S.ui.tab==='setup'||S.ui.tab==='results'||S.ui.tab==='live')&&own?S.ui.tab:'home', resRace:null, openRow:null, rosterSchool:null}); }
+      if(own) S.chosen=null;
+      save();
+      const now=curMeet(), changed=now&&(now.config.id+':'+now.config.ver)!==before;
+      return {ok:true, quiet:!changed&&!announce, msg:changed?'Today\'s meet: '+now.config.name:'Today\'s meet, '+now.config.name+', is on this device'};
+    });
+  });
+}
+let followAt=0;
+function followTick(force){
+  if(!sheetUrl()||S.ui.lock||ov||typing()) return;
+  if(!force&&Date.now()-followAt<300000) return;
+  followAt=Date.now();
+  followToday(force, false).then(r => { if(!r.quiet&&r.msg) toast(r.msg); if(r.ok&&!S.ui.lock&&!ov&&!typing()) render(); });
+}
+function setToday(id){
+  const url=sheetUrl(); if(!url) return;
+  toast('Marking today\'s meet');
+  postSheet(url, {t:'today', meet:id}).then(res => { if(!res||!res.ok) throw new Error((res&&res.error)||'refused');
+    if(listInfo) listInfo.today=id; S.chosen=null; save(); toast('Today\'s meet is now '+((S.meets[id]||{config:{name:id}}).config.name)+'. Volunteers\' phones switch to it when they next open the app.'); render();
+    listSheet(true).then(() => { if(!typing()&&!S.ui.lock&&!ov) render(); }); })
+    .catch(e => toast('Could not mark it ('+String((e&&e.message)||e)+'). Check the connection.'));
+}
+function deleteMeet(id){
+  const m=S.meets[id], url=sheetUrl();
+  if(todayId()===id){ toast('That is today\'s meet. Mark another meet as today\'s first.'); return; }
+  const finish=() => { if(m) m.config.deleted=true; if(S.meetId===id){ S.ui.lock=null; S.meetId=(liveMeets()[0]||{config:{}}).config.id||null; } save(); render(); };
+  if(!url||!(listInfo&&listInfo.meets.some(x => x.meet===id))){ finish(); toast('Removed from this device'); return; }
+  const tabs=m?m.config.races.map(r => m.config.name+' '+r.name):[];
+  toast('Deleting from the Sheet');
+  postSheet(url, {t:'delete', meet:id, tabs}).then(res => { if(!res||!res.ok) throw new Error((res&&res.error)||'refused');
+    if(listInfo) listInfo.meets=listInfo.meets.filter(x => x.meet!==id); finish(); toast('Deleted from the Sheet and this device'); })
+    .catch(e => toast('Not deleted: '+String((e&&e.message)||e)));
 }
 /* Every meet on the Sheet, for the organizer's home screen and for the mismatch check in Results. */
 let listBusy=false, listInfo=null;
@@ -315,7 +372,7 @@ function listSheet(force){
   listBusy=true;
   return fetchJSON(url+'?list=1').then(res => {
     if(!res||!res.ok) throw new Error((res&&res.error)==='No meet given'?'oldscript':((res&&res.error)||'The Sheet refused the request'));
-    listInfo={url, at:Date.now(), meets:res.meets||[], err:null};
+    listInfo={url, at:Date.now(), meets:res.meets||[], today:res.today||'', err:null};
   }).catch(e => { listInfo={url, at:Date.now(), meets:[], err:String((e&&e.message)||e)}; }).then(() => { listBusy=false; return listInfo; });
 }
 function sheetMeetsHTML(meet){
@@ -327,15 +384,17 @@ function sheetMeetsHTML(meet){
   else{
     const ms=listInfo.meets.slice().sort((a,b) => Math.max(b.setupAt||0, ...b.devices.map(d => d.at||0))-Math.max(a.setupAt||0, ...a.devices.map(d => d.at||0)));
     if(!ms.length) h+='<p class="note">Nothing on the Sheet yet.</p>';
-    else h+='<div class="list">'+ms.map(m => { const here=S.meets[m.meet]&&!S.meets[m.meet].config.deleted, cur=meet&&meet.config.id===m.meet, last=Math.max(0, ...m.devices.map(d => d.at||0));
-      return '<div class="item"><div class="grow"><strong>'+esc(m.name||'(no setup saved)')+'</strong> <span class="status">'+esc(m.meet)+'</span><div class="status">'+esc(m.summary||'')+(m.devices.length?(m.summary?' · ':'')+plural(m.devices.length,'phone')+' uploaded, last '+ago(last):'')+'</div></div>'+
-        (cur?'<span class="status">open now</span>':m.setup?'<button class="btn sm" data-act="open-sheet-meet" data-m="'+esc(m.meet)+'">'+(here?'Switch to it':'Open as organizer')+'</button>':'<span class="status">no setup on the Sheet</span>')+'</div>'; }).join('')+'</div>';
+    else h+='<p class="note">Volunteers\' phones open whichever meet is marked today\'s.'+(listInfo.today?'':' None is marked yet.')+'</p><div class="list">'+ms.map(m => { const cur=meet&&meet.config.id===m.meet, isToday=listInfo.today===m.meet, last=Math.max(0, ...m.devices.map(d => d.at||0));
+      return '<div class="item'+(isToday?' today':'')+'"><div class="grow"><strong>'+esc(m.name||'(no setup saved)')+'</strong>'+(isToday?' <span class="badge">Today\'s meet</span>':'')+' <span class="status">'+esc(m.meet)+'</span><div class="status">'+esc(m.summary||'')+(m.devices.length?(m.summary?' · ':'')+plural(m.devices.length,'phone')+' uploaded, last '+ago(last):'')+'</div></div>'+
+        '<div class="picks">'+(cur?'<span class="status">open now</span>':m.setup?'<button data-act="open-sheet-meet" data-m="'+esc(m.meet)+'">Open</button>':'')+
+        (isToday||!m.setup?'':'<button data-act="set-today" data-m="'+esc(m.meet)+'" data-confirm="Tap again: today\'s meet">Make today\'s meet</button>')+
+        (isToday?'':'<button class="danger" data-act="del-sheet-meet" data-m="'+esc(m.meet)+'" data-confirm="Tap again to delete">Delete</button>')+'</div></div>'; }).join('')+'</div>';
   }
-  return h+'<div class="rowf"><button class="btn" data-act="list-sheet">Check the Sheet</button></div></section>';
+  return h+'<div class="rowf"><button class="btn" data-act="list-sheet">Check the Sheet</button><button class="btn" data-act="new-meet">New meet</button></div></section>';
 }
 function openSheetMeet(id){
   const m=listInfo&&listInfo.meets.find(x => x.meet===id); if(!m||!m.setup){ toast('That meet has no setup on the Sheet'); return; }
-  importCode(m.setup, false, true).then(r => { toast(r.msg); if(r.ok){ S.meetId=id; Object.assign(S.ui,{lock:null, tab:'home', resRace:null, openRow:null, rosterSchool:null}); save(); render(); pullSheet(false); } });
+  importCode(m.setup, false, true).then(r => { toast(r.msg); if(r.ok){ S.org=true; S.meetId=id; S.chosen={meet:id, today:todayId()}; Object.assign(S.ui,{lock:null, tab:'home', resRace:null, openRow:null, rosterSchool:null}); save(); render(); pullSheet(false); } });
 }
 /* Phones uploading to a meet that is not the one open here: the usual sign that a link went to the wrong copy. */
 function otherMeetsHTML(meet){
@@ -396,9 +455,9 @@ function sendResults(meet){
   }).catch(e => { sheetMsg={kind:'warn', text:'The results did not go through ('+String((e&&e.message)||e)+'). Check the connection and try again, or use Copy.'}; })
     .then(() => { sheetBusy=false; if(typing()) deferRender(); else render(); });
 }
-setInterval(() => { maybeUpload(false); pushSetup(); pullSetup(false);
+setInterval(() => { maybeUpload(false); pushSetup(); followTick(false);
   if((S.ui.tab==='results'||S.ui.tab==='live')&&!S.ui.lock&&!ov&&document.visibilityState==='visible') pullSheet(false); }, 20000);
-window.addEventListener('online', () => { softHeader(); softSync(); maybeUpload(false); pushSetup(); pullSetup(true); });
+window.addEventListener('online', () => { softHeader(); softSync(); maybeUpload(false); pushSetup(); followTick(true); });
 window.addEventListener('offline', () => softHeader());
 
 /* ---------- small UI helpers ---------- */
@@ -501,14 +560,13 @@ function mainHTML(meet){
   return warn+homeHTML(meet);
 }
 function noMeetHTML(){
-  return '<section class="sec"><h2>No meet on this device</h2><p class="note">Volunteers: open the meet link you were sent, or paste it here.</p>'+
-    '<label class="field"><span>Meet link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste the meet link"></textarea></label>'+
-    '<div class="rowf"><button class="btn pri" data-act="import-link">Load meet</button></div></section>'+
-    '<section class="sec"><h3>Organizing a meet?</h3><p class="note">Create it here. This device becomes the organizer\'s, with Setup and Results. Volunteers get a link that shows only Timer, Schools and Roster.</p>'+
-    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div></section>'+
-    '<section class="sec"><h3>Or open a meet from your Sheet</h3><p class="note">Every meet set up with the Sheet connected is saved there. Paste the Sheet\'s web app link (from Setup, or Apps Script, Manage deployments) to see them.</p>'+
-    '<label class="field"><span>Web app link</span><input type="text" id="sheeturl" data-bind="sheet-url" value="'+esc(S.sheet||'')+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label></section>'+
-    sheetMeetsHTML(null)+versionHTML();
+  const su=sheetUrl();
+  return '<section class="sec"><h2>No meet on this device</h2><p class="note">'+(su?'This device is connected to the Sheet, but no meet is marked as today\'s meet yet'+(S.org?'. Mark one below, or make a new one.':'. Ask the organizer, then open the app again.'):'Volunteers: open the season link you were sent, or paste it here.')+'</p>'+
+    (su?'':'<label class="field"><span>Link</span><textarea id="linkpaste" class="linkbox" placeholder="Paste the link"></textarea></label><div class="rowf"><button class="btn pri" data-act="import-link">Open</button></div>')+'</section>'+
+    (su?'':'<section class="sec"><h3>Organizing?</h3><p class="note">Paste your Sheet\'s web app link (Setup, or Apps Script, Manage deployments) and this device becomes an organizer\'s, with every meet on the Sheet available. Or create a meet without a Sheet.</p>'+
+    '<label class="field"><span>Web app link</span><input type="text" id="sheeturl" data-bind="sheet-url" value="'+esc(S.sheet||'')+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
+    '<div class="rowf"><button class="btn" data-act="new-meet">Create a meet</button></div></section>')+
+    (S.org?sheetMeetsHTML(null):'')+versionHTML();
 }
 function versionHTML(){
   return '<section class="sec"><p class="note">Version '+APP_VERSION+'.'+(updateWaiting?' A newer version is ready.':'')+'</p>'+
@@ -526,8 +584,12 @@ function deviceNameField(){
   return '<label class="field"><span>Your name or device (shown to the organizer)</span><input type="text" id="devname" data-bind="device-name" value="'+esc(S.deviceName)+'" placeholder="Sam\'s phone" autocomplete="off"></label>';
 }
 function homeHTML(meet){
-  return '<section class="sec"><h2>'+esc(meet.config.name)+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date))+'. ':'')+
-    'This device is set up for the meet and needs no signal from here on. Pick your job.</p>'+meetPickerHTML(meet)+'<div class="rowf">'+deviceNameField()+soundField()+'</div></section>'+
+  const isToday=todayId()===meet.config.id, owner=isOwner(meet);
+  return '<section class="sec"><h2>'+esc(meet.config.name)+(isToday?' <span class="badge">Today\'s meet</span>':'')+'</h2><p class="note">'+(meet.config.date?esc(niceDate(meet.config.date))+'. ':'')+
+    (owner&&sheetUrl()&&!isToday&&todayId()?'This is not the meet marked as today\'s; volunteers\' phones are on the other one. ':'')+
+    'This device is set up for the meet and needs no signal from here on. Pick your job.</p>'+(owner?'':meetPickerHTML(meet))+
+    (owner&&sheetUrl()&&!isToday?'<div class="rowf"><button class="btn pri" data-act="set-today" data-m="'+esc(meet.config.id)+'" data-confirm="Tap again: today\'s meet">Make this today\'s meet</button></div>':'')+
+    '<div class="rowf">'+deviceNameField()+soundField()+'</div></section>'+
     '<section class="roles">'+
     '<button class="role c0" data-act="go" data-kind="timer"><b>Timer</b><span>At the line. Press START for each race, then tap once for every runner who crosses. Switch races at the top.</span></button>'+
     '<button class="role c1" data-act="go" data-kind="school"><b>Schools</b><span>At the line. Tap the school of every runner who crosses, in order.</span></button>'+
@@ -606,21 +668,26 @@ function setupHTML(meet){
      '<label class="field"><span>Web app link</span><input type="text" id="syncurl" data-bind="sync-url" value="'+esc(raw)+'" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
      (raw&&!su?'<div class="banner warn"><strong>That is not a web app link.</strong>It should start with https://script.google.com/ and end in /exec.</div>':'')+
      '<div class="rowf"><button class="btn'+(su?' pri':'')+'" data-act="sync-test">Test the connection</button></div>'+(su?'<p class="status" id="setupnote">'+esc(setupNote(meet))+'</p>':'')+'</section>';
-  h+='<section class="sec"><h2>Send the meet to volunteers</h2><p class="note">The volunteer link opens the app with only Timer, Schools and Roster: no Setup and no Results. It contains the races, schools and rosters, so treat it like the roster itself. Each volunteer opens it once with a connection. Send it again after any change.</p>'+
-     '<div class="rowf"><button class="btn pri" data-act="copy-link">Copy volunteer link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
-     '<button class="btn" data-act="show-link-qr">Show as QR code</button></div>'+
-     '<p class="note">Opening the volunteer link shows the volunteer view on any device, yours included, so you can check what they will see. For your own other devices, such as a tablet you will collect results on, use the organizer link. It opens the same meet with Setup and Results. Keep it to yourself.</p>'+
-     '<div class="rowf"><button class="btn" data-act="copy-org-link">Copy organizer link</button></div><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
+  const isToday=todayId()===c.id;
+  h+='<section class="sec"><h2>Today\'s meet</h2>'+(su?'<p class="note">'+(isToday?'This is today\'s meet. Volunteers\' phones open it by themselves.':'Volunteers\' phones open whichever meet is marked as today\'s. '+(todayId()?'Right now that is another meet.':'None is marked yet.'))+'</p>'+
+     (isToday?'':'<div class="rowf"><button class="btn pri" data-act="set-today" data-m="'+esc(c.id)+'" data-confirm="Tap again: today\'s meet">Make this today\'s meet</button></div>')
+     :'<p class="note">Connect a Sheet above and volunteers follow today\'s meet with one season link. Without it, each meet needs its own link, below.</p>')+'</section>';
+  h+='<section class="sec"><h2>Links</h2>'+(su?'<p class="note">One <strong>season link</strong> for volunteers, sent once. It connects their phone to the Sheet and opens today\'s meet, with only Timer, Schools and Roster. Your own other devices get the organizer version, which adds Live, Results and Setup and lists every meet. Keep that one to yourself.</p>'+
+     '<div class="rowf"><button class="btn pri" data-act="copy-season">Copy season link for volunteers</button>'+(navigator.share?'<button class="btn" data-act="share-season">Share</button>':'')+'<button class="btn" data-act="show-season-qr">Show as QR code</button></div>'+
+     '<div class="rowf"><button class="btn" data-act="copy-season-org">Copy organizer season link</button></div>':'')+
+     '<details class="roster"><summary>'+(su?'Backup: links for this meet only (no signal needed)':'Links for this meet')+'</summary><p class="note">A meet link carries this meet\'s setup inside it, so a phone with no signal can still load the meet. The volunteer link shows only Timer, Schools and Roster; the organizer link adds Live, Results and Setup. Send it again after any change.</p>'+
+     '<div class="rowf"><button class="btn" data-act="copy-link">Copy volunteer meet link</button>'+(navigator.share?'<button class="btn" data-act="share-link">Share</button>':'')+
+     '<button class="btn" data-act="show-link-qr">Show as QR code</button><button class="btn" data-act="copy-org-link">Copy organizer meet link</button></div></details><textarea id="linkout" class="linkbox" readonly hidden></textarea></section>';
 
   h+='<section class="sec"><h2>This device</h2><div class="rowf">'+deviceNameField()+soundField()+'</div></section>';
 
   h+='<section class="sec"><h2>Race day</h2><ol class="steps">'+
-     '<li>Before leaving a connection, every volunteer opens the meet link and waits for "Works offline" at the top.</li>'+
+     '<li>Before leaving a connection, every volunteer opens the season link (once a season) and then opens the app on race day with signal, and waits for "Works offline" at the top. It shows today\'s meet.</li>'+
      '<li>Timer and Schools stand at the line. Roster stands at the end of the chute and still collects the place cards.</li>'+
      '<li>Every tap is saved on the phone the moment it happens. With the Sheet connected, phones upload in the background and Live on your device shows the finish list as it grows.</li>'+
      '<li>Afterward, check Results and send the finished races to the Sheet. Without the Sheet, each volunteer presses Send and you scan the codes before anyone leaves.</li></ol></section>';
 
-  h+='<section class="sec"><h3>Remove</h3><div class="rowf"><button class="btn danger" data-act="del-meet" data-confirm="Tap again to delete this meet">Delete this meet</button></div></section>'+versionHTML();
+  h+='<section class="sec"><h3>Remove</h3><p class="note">'+(su?'Removes the meet from the Sheet (setup, uploads and result tabs) and from this device. Today\'s meet cannot be deleted; mark another first.':'Removes the meet from this device.')+'</p><div class="rowf"><button class="btn danger" data-act="del-meet" data-confirm="Tap again to delete this meet"'+(isToday?' disabled':'')+'>Delete this meet</button></div></section>'+versionHTML();
   return h;
 }
 
@@ -960,7 +1027,7 @@ function renderOverlay(){
         '<div class="rowf"><button class="btn" data-act="copy-send">Copy as text instead</button>'+(navigator.share?'<button class="btn" data-act="share-send">Share as text</button>':'')+'</div><textarea id="sendout" class="linkbox" readonly hidden></textarea>'
         :'<p class="note">Preparing the code.</p>'));
   }else if(ov.type==='linkqr'){
-    h=sheet('Meet link', '<div class="qrbox"><canvas id="qr"></canvas></div><p class="note">Volunteers point their phone camera at this and open the link. If it will not scan from a small screen, text the link instead.</p>');
+    h=sheet(ov.season?'Season link':'Meet link', '<div class="qrbox"><canvas id="qr"></canvas></div><p class="note">Volunteers point their phone camera at this and open the link.'+(ov.season?' They only need to do it once a season.':' If it will not scan from a small screen, text the link instead.')+'</p>');
   }else if(ov.type==='scan'){
     h=sheet('Scan a code', (scan.cam==='blocked'?CAM_BLOCKED:'<div class="scanbox"><video id="scanv" playsinline muted></video></div>')+
       '<div class="banner '+(ov.kind||'ok')+'" id="scanmsg"><strong>'+esc(ov.msg||'Point the camera at a volunteer\'s Send screen.')+'</strong></div>'+
@@ -1055,6 +1122,7 @@ function newMeet(){
     races:prev?clone(prev.config.races):[{id:'g', name:'Girls'},{id:'b', name:'Boys'}],
     runners:prev?clone(prev.config.runners):[]};
   if(!cfg.sync&&S.sheet) cfg.sync=S.sheet;
+  S.org=true; S.chosen={meet:id, today:todayId()};
   S.meets[id]={config:cfg, streams:{}, results:{}, own:true}; S.meetId=id;
   Object.assign(S.ui,{tab:'setup', resRace:null, openRow:null, lock:null, rosterSchool:null}); save(); render(); scheduleSetupPush();
 }
@@ -1081,7 +1149,7 @@ function act(name,el){
   switch(name){
     case 'tab': S.ui.tab=(!isOwner(meet)&&(d.tab==='setup'||d.tab==='results'))?'home':d.tab; S.ui.openRow=null; save(); render(); $('main').scrollTop=0;
       if(S.ui.tab==='results'||S.ui.tab==='live') pullSheet(false);
-      if(S.ui.tab==='home'&&isOwner(meet)) listSheet(false).then(() => { if(S.ui.tab==='home'&&!typing()) render(); }); break;
+      if((S.ui.tab==='home'||S.ui.tab==='setup')&&isOwner(meet)) listSheet(false).then(() => { if((S.ui.tab==='home'||S.ui.tab==='setup')&&!typing()) render(); }); break;
     case 'go': if(!meet) break;
       if(d.kind!=='timer'&&!meet.config.schools.length){ toast(isOwner(meet)?'Add the schools in Setup first':'This meet has no schools yet. Ask the organizer for an updated link.'); break; }
       S.ui.lock={kind:d.kind}; S.ui.rosterSchool=null; save(); render(); break;
@@ -1094,7 +1162,13 @@ function act(name,el){
     case 'copy-send': copyText(X.makeFrames(ov.code,1e9)[0], 'Copied. Send it to the organizer.', 'sendout'); break;
     case 'share-send': navigator.share({text:X.makeFrames(ov.code,1e9)[0]}).catch(shareFail); break;
     case 'new-meet': newMeet(); break;
-    case 'del-meet': meet.config.deleted=true; S.ui.lock=null; S.meetId=(liveMeets()[0]||{config:{}}).config.id||null; save(); render(); break;
+    case 'del-meet': deleteMeet(meet.config.id); break;
+    case 'del-sheet-meet': deleteMeet(d.m); break;
+    case 'set-today': setToday(d.m); break;
+    case 'copy-season': copyText(seasonLink(false), 'Season link copied. Send it to every volunteer once.', 'linkout'); break;
+    case 'copy-season-org': copyText(seasonLink(true), 'Organizer season link copied. Keep it to yourself.', 'linkout'); break;
+    case 'share-season': navigator.share({title:'XC Finish Line', text:'XC Finish Line season link', url:seasonLink(false)}).catch(shareFail); break;
+    case 'show-season-qr': ov={type:'linkqr', link:seasonLink(false), season:true}; renderOverlay(); break;
     case 'add-school': meet.config.schools.push({id:'s'+rid(3), name:'', color:PRESETS[meet.config.schools.length%PRESETS.length][1]}); touchConfig(meet); render();
       { const ns=$('sc-name-'+(meet.config.schools.length-1)); if(ns) ns.focus(); } break;
     case 'del-school': { const gone=meet.config.schools.splice(i,1)[0]; meet.config.runners=meet.config.runners.filter(u => u.s!==gone.id); touchConfig(meet); render(); break; }
@@ -1116,7 +1190,7 @@ function act(name,el){
         if(st.taps.length) st.endedAt=Date.now(); else{ st.startedAt=null; st.endedAt=null; toast(raceOf(meet,raceId).name+' start cancelled'); }
         touchStream(meet,st); render();
         if(!meet.config.races.some(rc => { const s2=myStream(meet,rc.id,'timer'); return !!(s2&&s2.startedAt&&!s2.endedAt); })) maybeUpload(true); } break;
-    case 'exit-lock': { const k=S.ui.lock?S.ui.lock.kind:'timer'; S.ui.lock=null; S.ui.rosterSchool=null; S.ui.tab=k==='school'?'schools':k; save(); render(); maybeUpload(true); pullSetup(true); break; }
+    case 'exit-lock': { const k=S.ui.lock?S.ui.lock.kind:'timer'; S.ui.lock=null; S.ui.rosterSchool=null; S.ui.tab=k==='school'?'schools':k; save(); render(); maybeUpload(true); followTick(true); break; }
     case 'reload-app': location.reload(); break;
     case 'upload-now': if(!meet||!syncUrl(meet)) break;
       if(upBusy) toast('Uploading now'); else if(!uploadPending(meet)) toast(myStreams(meet).some(hasData)?'Everything on this phone is uploaded':'Nothing recorded on this phone yet');
@@ -1132,7 +1206,7 @@ function act(name,el){
       toast('Checking the Sheet');
       fetchJSON(u+'?ping=1').then(res => { if(!res||!res.ok) throw new Error('read');
         if(!res.v||res.v<2){ toast('Connected to "'+res.sheet+'", but it runs an older script. Copy the script again, paste it over the old one, then Deploy, Manage deployments, Edit, New version.'); return; }
-        S.sheet=u; save(); pushSetup();
+        S.sheet=u; S.org=true; save(); pushSetup(); listInfo=null;
         return postSheet(u,{t:'ping'}).then(r2 => toast(r2&&r2.ok?'Connected to "'+res.sheet+'". Uploads will work.':'Connected to "'+res.sheet+'", but it is running an older script. Paste the script again and redeploy.'),
           () => toast('Reading works, but uploading was blocked. Redeploy with access set to Anyone.')); },
         () => toast('Could not reach the Sheet. Check the link, and that access is set to Anyone.')); break; }
@@ -1203,7 +1277,7 @@ function bind(el){
     case 'device-name': S.deviceName=val.trim().slice(0,30); save(); break;
     case 'sound': S.sound=val==='1'; save(); break;
     case 'sync-url': meet.config.sync=val.trim(); if(syncUrl(meet)) S.sheet=syncUrl(meet); touchConfig(meet); pendingRender=true; break;
-    case 'sheet-url': S.sheet=val.trim(); save(); listInfo=null; if(sheetUrl()) listSheet(true).then(() => { if(!typing()) render(); }); pendingRender=true; break;
+    case 'sheet-url': S.sheet=val.trim(); if(sheetUrl()) S.org=true; save(); listInfo=null; if(sheetUrl()) followToday(true, true).then(r => { toast(r.msg); if(!typing()) render(); }); pendingRender=true; break;
     case 'cell-order': S.cellOrder=val==='fl'?'fl':'lf'; save(); break;
     case 'school-name': meet.config.schools[i].name=val.trim(); touchConfig(meet); break;
     case 'school-color': meet.config.schools[i].color=val; touchConfig(meet); pendingRender=true; break;
@@ -1308,7 +1382,7 @@ document.addEventListener('change', e => {
 function boot(){
   render();
   const m=LINK_RE.exec(location.hash||'');
-  if(m) importCode(m[2], true, m[1]==='o').then(res => { if(res.ok) render(); if(!res.quiet) toast(res.msg); });
+  if(m) importLink(m[1], m[2], true).then(res => { if(res.ok) render(); if(!res.quiet&&res.msg) toast(res.msg); });
   if('serviceWorker' in navigator){
     /* When a newer version has been published, switch to it straight away instead of on the next visit,
        unless someone is recording or typing; then it waits for the next time the app is opened. */
@@ -1323,9 +1397,9 @@ function boot(){
   }
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(() => {});
   fetch('apps-script/Code.gs').then(r => r.ok?r.text():'').then(t => { scriptText=t; }, () => {});
-  setTimeout(() => { maybeUpload(false); pushSetup(); pullSetup(true); const m2=curMeet(); if(m2&&isOwner(m2)&&S.ui.tab==='home') listSheet(false).then(() => { if(S.ui.tab==='home'&&!typing()&&!S.ui.lock) render(); }); }, 3000);
+  setTimeout(() => { maybeUpload(false); pushSetup(); if(!m) followTick(true); }, 2500);
 }
 let scriptText='', reloading=false, updateWaiting=false;
-window.addEventListener('hashchange', () => { const m=LINK_RE.exec(location.hash||''); if(m) importCode(m[2], false, m[1]==='o').then(res => { toast(res.msg); if(res.ok) render(); }); });
+window.addEventListener('hashchange', () => { const m=LINK_RE.exec(location.hash||''); if(m) importLink(m[1], m[2], false).then(res => { if(res.msg) toast(res.msg); if(res.ok) render(); }); });
 boot();
 })();
