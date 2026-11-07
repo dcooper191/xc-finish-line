@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-07.2';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-07.3';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -659,7 +659,10 @@ function sheetDoc(meet){
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' results</title><style>'+css+'</style></head><body>'+body+'</body></html>';
 }
 /* A printable poster for the results link: QR code, what it is, and the address in plain text. */
-function qrPosterDoc(link, meet){
+function logoData(){
+  return fetch('icons/logo.png').then(r => r.ok?r.blob():null).then(b => b?new Promise(res => { const fr=new FileReader(); fr.onload=() => res(fr.result); fr.onerror=() => res(''); fr.readAsDataURL(b); }):'').catch(() => '');
+}
+function qrPosterDoc(link, meet, logo){
   const q=window.qrcode(0,'M'); q.addData(link,'Byte'); q.make();
   const n=q.getModuleCount(), cell=10, quiet=4, size=(n+2*quiet)*cell, cv=document.createElement('canvas'); cv.width=cv.height=size;
   const ctx=cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,size,size); ctx.fillStyle='#000';
@@ -669,8 +672,9 @@ function qrPosterDoc(link, meet){
     '.card{width:7.5in;text-align:center;padding:0.6in 0.5in;box-sizing:border-box}.kick{font-size:14px;letter-spacing:.28em;text-transform:uppercase;color:#1D5C41;font-weight:700;margin:0 0 10px}'+
     'h1{font-size:46px;letter-spacing:.02em;text-transform:uppercase;margin:0 0 6px;line-height:1}.sub{font-size:20px;color:#55655C;margin:0 0 30px}'+
     '.qr{display:block;width:4.6in;height:4.6in;margin:0 auto 26px;border:6px solid #15201B;border-radius:18px;padding:10px;box-sizing:border-box}'+
-    '.how{font-size:19px;margin:0 0 16px;font-weight:600}.url{font-size:12px;color:#55655C;word-break:break-all;margin:0}.foot{margin-top:30px;font-size:12px;color:#9BACA2;letter-spacing:.2em;text-transform:uppercase}';
+    '.logo{display:block;height:2.1in;margin:0 auto 14px}';
   return '<!doctype html><html><head><meta charset="utf-8"><title>Results link</title><style>'+css+'</style></head><body><div class="card">'+
+    (logo?'<img class="logo" src="'+logo+'" alt="">':'')+
     '<p class="kick">Cross Country</p><h1>Live Results</h1><p class="sub">'+esc(name)+(date?' · '+esc(date):'')+'</p>'+
     '<img class="qr" src="'+img+'" alt="QR code">'+
     '</div></body></html>';
@@ -1393,7 +1397,7 @@ function act(name,el){
     case 'dl-sheet': saveFile(ov.fname||(fileSlug(meet.config.name+' results')+'.html'), ov.doc, 'text/html'); break;
     case 'print-sheet': { const f=$('sheetframe'); if(f&&f.contentWindow){ f.contentWindow.focus(); f.contentWindow.print(); } break; }
     case 'copy-results-link': copyText(resultsLink(), 'Results link copied. Anyone with it sees the finish list, nothing else.', 'linkout'); break;
-    case 'show-results-qr': ov={type:'sheet', title:'Results link poster', doc:qrPosterDoc(resultsLink(), meet), fname:'results-link.html'}; renderOverlay(); break;
+    case 'show-results-qr': logoData().then(logo => { ov={type:'sheet', title:'Results link poster', doc:qrPosterDoc(resultsLink(), meet, logo), fname:'results-link.html'}; renderOverlay(); }); break;
     case 'print-qr': window.print(); break;
   }
 }
