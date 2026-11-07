@@ -3,7 +3,7 @@
 'use strict';
 const X = window.XC, fmtTime = X.fmtTime;
 const LS = 'xcfl.v2';
-const APP_VERSION = '2026-11-01.10';   /* keep in step with VERSION in sw.js */
+const APP_VERSION = '2026-11-07.1';   /* keep in step with VERSION in sw.js */
 const PRESETS = [['Green','#1F7A4D'],['Navy','#1B2A5C'],['Royal blue','#2456C5'],['Sky blue','#5AA9E6'],['Maroon','#7A1F2B'],['Red','#C8102E'],
   ['Orange','#E8701A'],['Gold','#E5B10E'],['Purple','#5B2D8E'],['Black','#1C1C1C'],['Gray','#7D858C'],['White','#F4F4EF'],['Teal','#0F8B8D'],['Brown','#6B4423']];
 const KIND_LABEL = {timer:'Timer', school:'Schools', roster:'Roster'};
@@ -824,7 +824,8 @@ function rosterHTML(meet){
       if(row){ fb=(row.time!=null?'<b>'+fmtTime(row.time+v.adj)+'</b>':'<span class="none">no time</span>')+(row.tapS?(row.tapS===u.s?' <span class="okword">&#10003;</span>':' <span class="warnline">&ne; tapped '+esc((schoolOf(meet,row.tapS)||{}).name||'?')+'</span>'):'');
         if(row.dup) fb+=' <span class="warnline">used twice</span>'; }
       h+='<div class="prow"><span class="pname">'+esc(u.n)+'</span><input type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="next" autocomplete="off" class="pbox" data-bind="place" data-u="'+esc(u.id)+'" value="'+(row?row.i+1:'')+'" placeholder="#" aria-label="Place">'+
-        '<span class="pfb">'+fb+'</span><button class="pdnf'+(st==='DNF'?' on':'')+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+(st==='DNF'?'DNS':'DNF')+'"'+(row?' hidden':'')+'>DNF</button></div>'; });
+        '<span class="pfb">'+fb+'</span><span class="pst"'+(row?' hidden':'')+'><button class="pdnf'+(st==='DNS'?' on':'')+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+(st==='DNS'?'':'DNS')+'">DNS</button>'+
+        '<button class="pdnf'+(st==='DNF'?' on':'')+'" data-act="set-status" data-u="'+esc(u.id)+'" data-st="'+(st==='DNF'?'':'DNF')+'">DNF</button></span></div>'; });
     h+='</div></section>';
   });
   return h;
@@ -1374,7 +1375,7 @@ function act(name,el){
     case 'set-school': colEdit(c => { padTo(c.schools,i+1,blankS); c.schools[i].s=(c.schools[i].s===d.s?null:d.s); }); break;
     case 'assign': r=resultOf(meet,S.ui.resRace,true); r.names[i+1]={u:d.u}; touchResult(meet,r); render(); break;
     case 'clear-name': r=resultOf(meet,S.ui.resRace,true); r.names[i+1]={clear:1}; touchResult(meet,r); render(); break;
-    case 'set-status': r=resultOf(meet,S.ui.resRace,true); r.status=r.status||{}; if(d.st==='DNF') r.status[d.u]='DNF'; else delete r.status[d.u]; touchResult(meet,r); render(); break;
+    case 'set-status': r=resultOf(meet,S.ui.resRace,true); r.status=r.status||{}; if(d.st==='DNF'||d.st==='DNS') r.status[d.u]=d.st; else delete r.status[d.u]; touchResult(meet,r); render(); break;
     case 'use-school-time': { const v=view(meet,S.ui.resRace), A=v.times.filter(t => t!=null), B=v.schools.map(x => x?x.t:null).filter(t => t!=null);
       const off=(A.length>=3&&B.length>=3)?X.estimateOffset(A,B):0;
       colEdit(c => { padTo(c.times,i+1,blankT); c.times[i]=Math.round(c.schools[i].t-off); }); toast('Time filled from the school tap'); break; }
